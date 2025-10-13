@@ -9,6 +9,115 @@ const voiceBtn = document.getElementById('voice-btn');
 let recognition = null;
 let isRecording = false;
 
+// Audio Context für iOS unlock
+let audioContext = null;
+let audioUnlocked = false;
+
+function unlockAudioContext() {
+  if (audioUnlocked) return;
+  
+  try {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // Stiller Sound um Audio Context zu entsperren (iOS Workaround)
+    const buffer = audioContext.createBuffer(1, 1, 22050);
+    const source = audioContext.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioContext.destination);
+    source.start(0);
+    
+    audioUnlocked = true;
+    console.log('🔓 Audio context unlocked');
+  } catch (e) {
+    console.warn('Audio context unlock failed:', e);
+  }
+}
+
+// Audio abspielen aus Base64 - mit iOS-Fix
+function playAudio(base64Audio, retryCount = 0) {
+  try {
+    const binaryString = atob(base64Audio);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    const blob = new Blob([bytes], { type: 'audio/mpeg' });
+    const url = URL.createObjectURL(blob);
+    
+    const audio = new Audio(url);
+    
+    // iOS: Audio muss geladen werden vor play()
+    audio.load();
+    
+    // Abspielen mit Fehlerbehandlung
+    const playPromise = audio.play();
+    
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          console.log('🔊 Playing OpenAI TTS audio');
+        })
+        .catch(err => {
+          console.error('Audio playback error:', err);
+          
+          // Retry einmal (iOS braucht manchmal 2. Versuch)
+          if (retryCount < 1) {
+            console.log('🔄 Retrying audio playback...');
+            setTimeout(() => playAudio(base64Audio, retryCount + 1), 300);
+          } else {
+            // Fallback: Manuellen Play-Button anzeigen
+            showManualPlayButton(url);
+          }
+        });
+    }
+    
+    audio.onended = () => URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error('Failed to play audio:', e);
+  }
+}
+
+// Manueller Play-Button als Fallback für iOS
+function showManualPlayButton(audioUrl) {
+  const existing = document.getElementById('manual-play-btn');
+  if (existing) return; // Nur einen Button anzeigen
+  
+  const playBtn = document.createElement('button');
+  playBtn.id = 'manual-play-btn';
+  playBtn.textContent = '🔊 Play Audio';
+  playBtn.style.cssText = `
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 25px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    animation: pulse 1.5s infinite;
+  `;
+  
+  playBtn.onclick = () => {
+    const audio = new Audio(audioUrl);
+    audio.play()
+      .then(() => {
+        console.log('🔊 Manual audio play successful');
+        playBtn.remove();
+      })
+      .catch(err => console.error('Manual play failed:', err));
+  };
+  
+  document.body.appendChild(playBtn);
+  
+  // Auto-remove nach 10 Sekunden
+  setTimeout(() => playBtn.remove(), 10000);
+}
+
 function initSpeechRecognition() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   
@@ -76,28 +185,6 @@ function add(role, text) {
   chat.scrollTop = chat.scrollHeight;
 }
 
-// Audio abspielen aus Base64
-function playAudio(base64Audio) {
-  try {
-    const binaryString = atob(base64Audio);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    const blob = new Blob([bytes], { type: 'audio/mpeg' });
-    const url = URL.createObjectURL(blob);
-    
-    const audio = new Audio(url);
-    audio.play()
-      .then(() => console.log('🔊 Playing OpenAI TTS audio'))
-      .catch(err => console.error('Audio playback error:', err));
-    
-    audio.onended = () => URL.revokeObjectURL(url);
-  } catch (e) {
-    console.error('Failed to play audio:', e);
-  }
-}
-
 // Voice Button
 if (voiceBtn) {
   voiceBtn.onclick = () => {
@@ -110,6 +197,9 @@ if (voiceBtn) {
       add('ai', '⚠️ Please connect first!');
       return;
     }
+
+    // Audio Context entsperren
+    unlockAudioContext();
 
     if (isRecording) {
       recognition.stop();
@@ -166,6 +256,10 @@ connectBtn.onclick = () => {
 
   ws.onopen = () => {
     console.log('✅ WebSocket connected');
+    
+    // Audio Context entsperren (wichtig für iOS!)
+    unlockAudioContext();
+    
     add('ai', '✅ Connected! Initializing AI with high-quality voice...');
     
     ws.send(JSON.stringify({
@@ -271,6 +365,9 @@ sendBtn.onclick = () => {
     add('ai', '⚠️ Not connected! Please click "Connect" first.');
     return;
   }
+
+  // Audio Context entsperren bei erster User-Interaktion
+  unlockAudioContext();
 
   add('user', val);
   
