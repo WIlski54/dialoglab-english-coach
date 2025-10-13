@@ -116,6 +116,36 @@
       border-left: 4px solid #667eea;
       margin: 12px 0;
     }
+    #voice-btn {
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      min-width: 120px;
+      position: relative;
+      overflow: hidden;
+    }
+    #voice-btn.recording {
+      background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+    .input-group {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+    }
+    .voice-hint {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin: 8px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
   </style>
 </head>
 <body>
@@ -123,8 +153,8 @@
     <h1>🎓 DialogLab – English Coach</h1>
     
     <div class="info-box">
-      <strong>🎯 Übe Englisch in verschiedenen Alltagssituationen!</strong><br>
-      Wähle ein Szenario und dein Level, dann starte das Gespräch mit der KI.
+      <strong>🎯 Practice English in real-life situations!</strong><br>
+      Choose a scenario and your level, then start a voice conversation with the AI coach.
     </div>
     
     <div class="row">
@@ -142,9 +172,9 @@
       <label>
         Level:
         <select id="level">
-          <option value="A1">A1 (Anfänger)</option>
-          <option value="A2" selected>A2 (Grundlegend)</option>
-          <option value="B1">B1 (Mittelstufe)</option>
+          <option value="A1">A1 (Beginner)</option>
+          <option value="A2" selected>A2 (Elementary)</option>
+          <option value="B1">B1 (Intermediate)</option>
         </select>
       </label>
       
@@ -153,17 +183,41 @@
 
     <div id="chat" class="chat"></div>
 
-    <div class="row">
-      <input id="text" placeholder="Schreibe deine Antwort auf Englisch..." style="flex:1" />
+    <div class="voice-hint" id="voice-hint" style="display: none;">
+      🎤 <strong>Voice Mode Active!</strong> Click the microphone button and speak in English.
+    </div>
+
+    <div class="input-group">
+      <button id="voice-btn" title="Click to speak">🎤 Speak</button>
+      <input id="text" placeholder="Or type your answer..." />
       <button id="send">📤 Send</button>
     </div>
     
     <p class="small">
-      💡 <strong>Tipp:</strong> Schalte deine Lautsprecher an! Die KI spricht mit dir in hochwertigem Englisch.
-      Drücke <strong>Enter</strong> zum Senden.
+      🎤 <strong>Voice Input:</strong> Click the microphone and speak! The AI will respond with high-quality voice.
+      Press <strong>Enter</strong> to send text messages.
     </p>
   </div>
 
   <script src="./client.js"></script>
+  <script>
+    // Voice hint anzeigen wenn connected
+    const voiceBtn = document.getElementById('voice-btn');
+    const voiceHint = document.getElementById('voice-hint');
+    
+    const originalOnOpen = WebSocket.prototype.addEventListener;
+    
+    // Zeige Voice Hint nach Connect
+    document.getElementById('connect').addEventListener('click', () => {
+      setTimeout(() => {
+        if (voiceBtn && !voiceBtn.disabled) {
+          voiceHint.style.display = 'flex';
+          setTimeout(() => {
+            voiceHint.style.display = 'none';
+          }, 5000);
+        }
+      }, 2000);
+    });
+  </script>
 </body>
 </html>
