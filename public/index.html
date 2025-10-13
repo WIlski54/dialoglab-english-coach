@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DialogLab – English Coach</title>
+  <style>
+    body { 
+      font: 16px/1.4 system-ui, sans-serif; 
+      max-width: 900px; 
+      margin: 0 auto; 
+      padding: 16px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+    .container {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    }
+    h1 { 
+      margin: 0 0 20px 0; 
+      color: #333;
+      font-size: 28px;
+    }
+    .row { 
+      display: flex; 
+      gap: 8px; 
+      margin: 12px 0; 
+      flex-wrap: wrap;
+    }
+    .chat { 
+      border: 1px solid #ddd; 
+      border-radius: 12px; 
+      padding: 16px; 
+      height: 50vh; 
+      overflow: auto; 
+      background: #fafafa;
+      margin: 16px 0;
+    }
+    .bubble { 
+      margin: 8px 0; 
+      padding: 10px 14px; 
+      border-radius: 18px; 
+      max-width: 75%; 
+      word-wrap: break-word;
+      animation: slideIn 0.3s ease-out;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .me { 
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      margin-left: auto;
+      border-bottom-right-radius: 4px;
+    }
+    .ai { 
+      background: #e8f4f8;
+      color: #333;
+      border-bottom-left-radius: 4px;
+    }
+    .loading {
+      opacity: 0.7;
+      font-style: italic;
+    }
+    .small { 
+      font-size: 13px; 
+      opacity: .7;
+      margin: 8px 0;
+    }
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    select, input, button {
+      padding: 10px 14px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 15px;
+      font-family: inherit;
+    }
+    select:focus, input:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    input {
+      flex: 1;
+    }
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    button:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .info-box {
+      background: #e8f4f8;
+      padding: 12px;
+      border-radius: 8px;
+      border-left: 4px solid #667eea;
+      margin: 12px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎓 DialogLab – English Coach</h1>
+    
+    <div class="info-box">
+      <strong>🎯 Übe Englisch in verschiedenen Alltagssituationen!</strong><br>
+      Wähle ein Szenario und dein Level, dann starte das Gespräch mit der KI.
+    </div>
+    
+    <div class="row">
+      <label>
+        Scenario:
+        <select id="scenario">
+          <option value="shop">🛒 At the Shop</option>
+          <option value="airport">✈️ At the Airport</option>
+          <option value="school">📚 At School</option>
+          <option value="food">🍽️ Ordering Food</option>
+          <option value="present">🎁 Buying a Present</option>
+        </select>
+      </label>
+      
+      <label>
+        Level:
+        <select id="level">
+          <option value="A1">A1 (Anfänger)</option>
+          <option value="A2" selected>A2 (Grundlegend)</option>
+          <option value="B1">B1 (Mittelstufe)</option>
+        </select>
+      </label>
+      
+      <button id="connect" style="align-self: flex-end;">🚀 Connect</button>
+    </div>
+
+    <div id="chat" class="chat"></div>
+
+    <div class="row">
+      <input id="text" placeholder="Schreibe deine Antwort auf Englisch..." style="flex:1" />
+      <button id="send">📤 Send</button>
+    </div>
+    
+    <p class="small">
+      💡 <strong>Tipp:</strong> Schalte deine Lautsprecher an! Die KI spricht mit dir in hochwertigem Englisch.
+      Drücke <strong>Enter</strong> zum Senden.
+    </p>
+  </div>
+
+  <script src="./client.js"></script>
+</body>
+</html>

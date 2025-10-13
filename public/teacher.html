@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DialogLab – Lehrer-Dashboard</title>
+  <style>
+    body { 
+      font: 14px/1.4 system-ui, sans-serif; 
+      max-width: 1400px; 
+      margin: 0 auto; 
+      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+    .container {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    }
+    h1 { 
+      margin: 0 0 8px 0; 
+      color: #333;
+      font-size: 28px;
+    }
+    .subtitle {
+      color: #666;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+    .status {
+      display: inline-block;
+      padding: 4px 12px;
+      background: #4ade80;
+      color: white;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-left: 12px;
+    }
+    table { 
+      border-collapse: collapse; 
+      width: 100%;
+      margin-top: 16px;
+      background: white;
+    }
+    th, td { 
+      border: 1px solid #e5e7eb; 
+      padding: 12px;
+      text-align: left;
+    }
+    th { 
+      background: #f9fafb;
+      font-weight: 600;
+      color: #374151;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    td {
+      font-size: 14px;
+      color: #1f2937;
+    }
+    .hit { 
+      background: #ecfdf5;
+      color: #047857;
+      font-weight: 500;
+    }
+    .err { 
+      background: #fef2f2;
+      color: #dc2626;
+      font-weight: 500;
+    }
+    tbody tr:hover {
+      background: #f9fafb;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #6b7280;
+    }
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>
+      🎓 Lehrer-Dashboard
+      <span class="status" id="status">● Verbunden</span>
+    </h1>
+    <p class="subtitle">Echtzeit-Überwachung aller aktiven Schüler-Sessions</p>
+    
+    <table id="t">
+      <thead>
+        <tr>
+          <th style="width: 100px;">Session-ID</th>
+          <th style="width: 120px;">Szenario</th>
+          <th style="width: 80px;">Level</th>
+          <th>Letzter Schüler-Satz</th>
+          <th style="width: 180px;">Treffer (Vokabeln)</th>
+          <th style="width: 120px;">Fehler</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td colspan="6" class="empty-state">
+            <div class="empty-state-icon">📊</div>
+            <div><strong>Keine aktiven Sessions</strong></div>
+            <div style="font-size: 13px; margin-top: 8px;">Schüler müssen sich zuerst verbinden</div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script src="./teacher.js"></script>
+</body>
+</html>

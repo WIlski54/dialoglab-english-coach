@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: dialoglab-realtime-en
+    env: node
+    plan: starter
+    autoDeploy: true
+    branch: main
+    buildCommand: "npm ci"
+    startCommand: "npm start"
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: REALTIME_MODEL
+        value: gpt-4o-realtime-preview   # prüfe das aktuell empfohlene Realtime-Modell im Dashboard
+      - key: ALLOWED_ORIGINS
+        value: "*"                       # für Tests; später Schul-Domain setzen
+    healthCheckPath: /healthz
