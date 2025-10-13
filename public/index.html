@@ -130,6 +130,17 @@
       0%, 100% { transform: scale(1); }
       50% { transform: scale(1.05); }
     }
+    
+    /* Manual Play Button Animation */
+    @keyframes slideInRight {
+      from { transform: translateX(100px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    
+    #manual-play-btn {
+      animation: slideInRight 0.3s ease-out, pulse 1.5s infinite 0.3s !important;
+    }
+    
     .input-group {
       display: flex;
       gap: 8px;
