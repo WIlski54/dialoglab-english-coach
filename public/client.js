@@ -9,24 +9,56 @@ const voiceBtn = document.getElementById('voice-btn');
 let recognition = null;
 let isRecording = false;
 
-// Audio Context für iOS unlock
+// Audio Context für iOS unlock mit Test-Sound
 let audioContext = null;
 let audioUnlocked = false;
+
+async function unlockAudioWithSound() {
+  if (audioUnlocked) return true;
+  
+  try {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // Test-Sound erzeugen (sehr kurz und leise)
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.frequency.value = 440;
+    gainNode.gain.value = 0.01; // Sehr leise
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.03); // 30ms
+    
+    // Warten bis Sound abgespielt wurde
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
+    audioUnlocked = true;
+    console.log('🔓 Audio fully unlocked with test sound');
+    return true;
+  } catch (e) {
+    console.warn('Audio unlock failed:', e);
+    return false;
+  }
+}
 
 function unlockAudioContext() {
   if (audioUnlocked) return;
   
   try {
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    if (!audioContext) {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
     
-    // Stiller Sound um Audio Context zu entsperren (iOS Workaround)
+    // Stiller Buffer
     const buffer = audioContext.createBuffer(1, 1, 22050);
     const source = audioContext.createBufferSource();
     source.buffer = buffer;
     source.connect(audioContext.destination);
     source.start(0);
     
-    audioUnlocked = true;
     console.log('🔓 Audio context unlocked');
   } catch (e) {
     console.warn('Audio context unlock failed:', e);
@@ -198,9 +230,6 @@ if (voiceBtn) {
       return;
     }
 
-    // Audio Context entsperren
-    unlockAudioContext();
-
     if (isRecording) {
       recognition.stop();
     } else {
@@ -214,7 +243,7 @@ if (voiceBtn) {
   };
 }
 
-connectBtn.onclick = () => {
+connectBtn.onclick = async () => {
   // Disconnect-Funktion
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.close();
@@ -245,20 +274,28 @@ connectBtn.onclick = () => {
   }
 
   chat.innerHTML = '';
+  
+  add('ai', '🔌 Connecting to server...');
+  
+  // WICHTIG: Audio mit Test-Sound entsperren (iOS Fix!)
+  add('ai', '🔊 Preparing audio... (you might hear a brief tone)');
+  const audioReady = await unlockAudioWithSound();
+  
+  if (audioReady) {
+    add('ai', '✅ Audio system ready!');
+  } else {
+    add('ai', '⚠️ Audio might need manual activation.');
+  }
 
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${location.host}/ws`;
   
   console.log('Connecting to:', wsUrl);
-  add('ai', '🔌 Connecting to server...');
   
   ws = new WebSocket(wsUrl);
 
   ws.onopen = () => {
     console.log('✅ WebSocket connected');
-    
-    // Audio Context entsperren (wichtig für iOS!)
-    unlockAudioContext();
     
     add('ai', '✅ Connected! Initializing AI with high-quality voice...');
     
@@ -365,9 +402,6 @@ sendBtn.onclick = () => {
     add('ai', '⚠️ Not connected! Please click "Connect" first.');
     return;
   }
-
-  // Audio Context entsperren bei erster User-Interaktion
-  unlockAudioContext();
 
   add('user', val);
   
