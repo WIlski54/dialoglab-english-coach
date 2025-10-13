@@ -125,6 +125,28 @@ if (voiceBtn) {
 }
 
 connectBtn.onclick = () => {
+  // Disconnect-Funktion
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.close();
+    chat.innerHTML = '';
+    add('ai', '👋 Disconnected. Click Connect to start a new conversation.');
+    
+    connectBtn.disabled = false;
+    connectBtn.textContent = '🚀 Connect';
+    connectBtn.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+    sendBtn.disabled = true;
+    txt.disabled = true;
+    txt.value = '';
+    
+    if (voiceBtn) {
+      voiceBtn.disabled = true;
+      voiceBtn.style.display = 'none';
+    }
+    
+    return;
+  }
+
+  // Connect-Funktion
   const scenario = document.getElementById('scenario').value;
   const level = document.getElementById('level').value;
 
@@ -152,8 +174,9 @@ connectBtn.onclick = () => {
       level: level
     }));
     
-    connectBtn.disabled = true;
-    connectBtn.textContent = 'Connected ✓';
+    connectBtn.disabled = false;
+    connectBtn.textContent = '🔴 Disconnect';
+    connectBtn.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
     sendBtn.disabled = false;
     txt.disabled = false;
     
@@ -219,10 +242,14 @@ connectBtn.onclick = () => {
 
   ws.onclose = (e) => {
     console.warn('🔴 WebSocket closed:', e.code, e.reason);
-    add('ai', '🔴 Connection closed. Please reconnect.');
+    
+    if (chat.children.length > 0) {
+      add('ai', '🔴 Connection closed. Click Connect to reconnect.');
+    }
     
     connectBtn.disabled = false;
-    connectBtn.textContent = 'Connect';
+    connectBtn.textContent = '🚀 Connect';
+    connectBtn.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
     sendBtn.disabled = true;
     txt.disabled = true;
     
