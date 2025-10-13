@@ -3,6 +3,70 @@ const chat = document.getElementById('chat');
 const txt = document.getElementById('text');
 const connectBtn = document.getElementById('connect');
 const sendBtn = document.getElementById('send');
+const voiceBtn = document.getElementById('voice-btn');
+
+// Speech Recognition Setup
+let recognition = null;
+let isRecording = false;
+
+function initSpeechRecognition() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  
+  if (!SpeechRecognition) {
+    console.warn('Speech Recognition not supported');
+    if (voiceBtn) voiceBtn.style.display = 'none';
+    return;
+  }
+
+  recognition = new SpeechRecognition();
+  recognition.lang = 'en-US';
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+
+  recognition.onstart = () => {
+    isRecording = true;
+    voiceBtn.classList.add('recording');
+    voiceBtn.innerHTML = '🔴 Listening...';
+    txt.placeholder = 'Speak now...';
+  };
+
+  recognition.onresult = (event) => {
+    const transcript = Array.from(event.results)
+      .map(result => result[0].transcript)
+      .join('');
+    
+    txt.value = transcript;
+    
+    // Wenn finales Ergebnis
+    if (event.results[0].isFinal) {
+      console.log('Final transcript:', transcript);
+    }
+  };
+
+  recognition.onend = () => {
+    isRecording = false;
+    voiceBtn.classList.remove('recording');
+    voiceBtn.innerHTML = '🎤 Speak';
+    txt.placeholder = 'Or type your answer...';
+    
+    // Automatisch senden wenn Text vorhanden
+    if (txt.value.trim()) {
+      setTimeout(() => sendBtn.click(), 500);
+    }
+  };
+
+  recognition.onerror = (event) => {
+    console.error('Speech recognition error:', event.error);
+    isRecording = false;
+    voiceBtn.classList.remove('recording');
+    voiceBtn.innerHTML = '🎤 Speak';
+    
+    if (event.error === 'no-speech') {
+      add('ai', '🎤 I didn\'t hear anything. Try again!');
+    }
+  };
+}
 
 function add(role, text) {
   const div = document.createElement('div');
@@ -15,7 +79,6 @@ function add(role, text) {
 // Audio abspielen aus Base64
 function playAudio(base64Audio) {
   try {
-    // Base64 zu Blob konvertieren
     const binaryString = atob(base64Audio);
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
@@ -24,56 +87,84 @@ function playAudio(base64Audio) {
     const blob = new Blob([bytes], { type: 'audio/mpeg' });
     const url = URL.createObjectURL(blob);
     
-    // Audio-Element erstellen und abspielen
     const audio = new Audio(url);
     audio.play()
-      .then(() => console.log('🔊 Audio playing'))
+      .then(() => console.log('🔊 Playing OpenAI TTS audio'))
       .catch(err => console.error('Audio playback error:', err));
     
-    // URL nach Abspielen freigeben
     audio.onended = () => URL.revokeObjectURL(url);
   } catch (e) {
     console.error('Failed to play audio:', e);
   }
 }
 
+// Voice Button
+if (voiceBtn) {
+  voiceBtn.onclick = () => {
+    if (!recognition) {
+      add('ai', '⚠️ Voice input not supported on this device.');
+      return;
+    }
+
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      add('ai', '⚠️ Please connect first!');
+      return;
+    }
+
+    if (isRecording) {
+      recognition.stop();
+    } else {
+      txt.value = '';
+      try {
+        recognition.start();
+      } catch (e) {
+        console.error('Recognition start error:', e);
+      }
+    }
+  };
+}
+
 connectBtn.onclick = () => {
   const scenario = document.getElementById('scenario').value;
   const level = document.getElementById('level').value;
 
-  // Alte Verbindung schließen
   if (ws) {
     ws.close();
   }
 
-  // Chat leeren
   chat.innerHTML = '';
 
-  // WebSocket-URL
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${location.host}/ws`;
   
   console.log('Connecting to:', wsUrl);
-  add('ai', '🔌 Verbinde mit Server...');
+  add('ai', '🔌 Connecting to server...');
   
   ws = new WebSocket(wsUrl);
 
   ws.onopen = () => {
     console.log('✅ WebSocket connected');
-    add('ai', '✅ Verbunden! Initialisiere KI...');
+    add('ai', '✅ Connected! Initializing AI with high-quality voice...');
     
-    // Session initialisieren
     ws.send(JSON.stringify({
       type: 'client.init',
       scenario: scenario,
       level: level
     }));
     
-    // UI anpassen
     connectBtn.disabled = true;
-    connectBtn.textContent = 'Verbunden ✓';
+    connectBtn.textContent = 'Connected ✓';
     sendBtn.disabled = false;
     txt.disabled = false;
+    
+    if (voiceBtn) {
+      voiceBtn.disabled = false;
+      voiceBtn.style.display = 'block';
+    }
+    
+    // Speech Recognition initialisieren
+    initSpeechRecognition();
+    
     txt.focus();
   };
 
@@ -92,46 +183,53 @@ connectBtn.onclick = () => {
       const msg = JSON.parse(payload);
       console.log('📨 Received:', msg.type);
 
-      // KI-Antwort mit Audio
       if (msg.type === 'server.response') {
+        const loader = document.getElementById('loading-indicator');
+        if (loader) loader.remove();
+        
         if (msg.text) {
           add('ai', msg.text);
         }
         
-        // Audio abspielen
+        // OpenAI TTS Audio abspielen
         if (msg.audio) {
           playAudio(msg.audio);
         }
         return;
       }
 
-      // Fehler
       if (msg.type === 'error') {
         console.error('Error:', msg);
-        add('ai', `⚠️ Fehler: ${msg.message || 'Unbekannter Fehler'}`);
+        const loader = document.getElementById('loading-indicator');
+        if (loader) loader.remove();
+        add('ai', `⚠️ Error: ${msg.message || 'Unknown error'}`);
         return;
       }
 
     } catch (e) {
       console.error('Message parse error:', e);
-      add('ai', '⚠️ Fehler beim Verarbeiten der Nachricht');
+      add('ai', '⚠️ Failed to process message');
     }
   };
 
   ws.onerror = (e) => {
     console.error('❌ WebSocket error:', e);
-    add('ai', '❌ Verbindungsfehler. Prüfe die Konsole.');
+    add('ai', '❌ Connection error');
   };
 
   ws.onclose = (e) => {
     console.warn('🔴 WebSocket closed:', e.code, e.reason);
-    add('ai', '🔴 Verbindung geschlossen. Bitte neu verbinden.');
+    add('ai', '🔴 Connection closed. Please reconnect.');
     
-    // UI zurücksetzen
     connectBtn.disabled = false;
     connectBtn.textContent = 'Connect';
     sendBtn.disabled = true;
     txt.disabled = true;
+    
+    if (voiceBtn) {
+      voiceBtn.disabled = true;
+      voiceBtn.style.display = 'none';
+    }
   };
 };
 
@@ -139,45 +237,32 @@ sendBtn.onclick = () => {
   const val = txt.value.trim();
   
   if (!val) {
-    console.warn('No text to send');
     return;
   }
   
   if (!ws || ws.readyState !== WebSocket.OPEN) {
-    console.warn('Connection not ready');
-    add('ai', '⚠️ Keine Verbindung! Bitte zuerst "Connect" klicken.');
+    add('ai', '⚠️ Not connected! Please click "Connect" first.');
     return;
   }
 
-  // Nachricht anzeigen
   add('user', val);
   
-  // Lade-Indikator hinzufügen
   const loadingDiv = document.createElement('div');
   loadingDiv.className = 'bubble ai loading';
-  loadingDiv.textContent = '💭 KI denkt nach...';
+  loadingDiv.textContent = '💭 AI is thinking...';
   loadingDiv.id = 'loading-indicator';
   chat.appendChild(loadingDiv);
   chat.scrollTop = chat.scrollHeight;
 
-  // An Server senden
   ws.send(JSON.stringify({
     type: 'client.text',
     text: val
   }));
   
-  // Lade-Indikator nach 500ms entfernen
-  setTimeout(() => {
-    const loader = document.getElementById('loading-indicator');
-    if (loader) loader.remove();
-  }, 500);
-  
-  // Eingabefeld leeren
   txt.value = '';
   txt.focus();
 };
 
-// Enter zum Senden
 txt.addEventListener('keypress', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
@@ -188,3 +273,7 @@ txt.addEventListener('keypress', (e) => {
 // Initial: Buttons deaktiviert
 sendBtn.disabled = true;
 txt.disabled = true;
+if (voiceBtn) {
+  voiceBtn.disabled = true;
+  voiceBtn.style.display = 'none';
+}
