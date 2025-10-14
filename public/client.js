@@ -9,10 +9,11 @@ const voiceBtn = document.getElementById('voice-btn');
 let recognition = null;
 let isRecording = false;
 
-// Audio Context für iOS unlock mit Test-Sound
+// Audio Context für iOS - ZENTRAL für alle Audio-Operationen
 let audioContext = null;
 let audioUnlocked = false;
 
+// Audio Context entsperren mit Test-Sound
 async function unlockAudioWithSound() {
   if (audioUnlocked) return true;
   
@@ -36,7 +37,7 @@ async function unlockAudioWithSound() {
     await new Promise(resolve => setTimeout(resolve, 50));
     
     audioUnlocked = true;
-    console.log('🔓 Audio fully unlocked with test sound');
+    console.log('🔊 Audio fully unlocked with test sound');
     return true;
   } catch (e) {
     console.warn('Audio unlock failed:', e);
@@ -44,79 +45,96 @@ async function unlockAudioWithSound() {
   }
 }
 
-function unlockAudioContext() {
-  if (audioUnlocked) return;
-  
+// 🔧 NEUE FUNKTION: Audio über Web Audio API abspielen
+async function playAudioViaWebAudioAPI(base64Audio) {
   try {
     if (!audioContext) {
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      throw new Error('AudioContext not initialized');
     }
-    
-    // Stiller Buffer
-    const buffer = audioContext.createBuffer(1, 1, 22050);
-    const source = audioContext.createBufferSource();
-    source.buffer = buffer;
-    source.connect(audioContext.destination);
-    source.start(0);
-    
-    console.log('🔓 Audio context unlocked');
-  } catch (e) {
-    console.warn('Audio context unlock failed:', e);
-  }
-}
 
-// Audio abspielen aus Base64 - mit iOS-Fix
-function playAudio(base64Audio, retryCount = 0) {
-  try {
+    // Base64 -> Binary -> ArrayBuffer
     const binaryString = atob(base64Audio);
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
       bytes[i] = binaryString.charCodeAt(i);
     }
-    const blob = new Blob([bytes], { type: 'audio/mpeg' });
-    const url = URL.createObjectURL(blob);
     
-    const audio = new Audio(url);
+    // ArrayBuffer dekodieren
+    const audioBuffer = await audioContext.decodeAudioData(bytes.buffer);
     
-    // iOS: Audio muss geladen werden vor play()
-    audio.load();
+    // BufferSource erstellen und abspielen
+    const source = audioContext.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(audioContext.destination);
+    source.start(0);
     
-    // Abspielen mit Fehlerbehandlung
-    const playPromise = audio.play();
+    console.log('🔊 Playing audio via Web Audio API');
     
-    if (playPromise !== undefined) {
-      playPromise
-        .then(() => {
-          console.log('🔊 Playing OpenAI TTS audio');
-        })
-        .catch(err => {
-          console.error('Audio playback error:', err);
-          
-          // Retry einmal (iOS braucht manchmal 2. Versuch)
-          if (retryCount < 1) {
-            console.log('🔄 Retrying audio playback...');
-            setTimeout(() => playAudio(base64Audio, retryCount + 1), 300);
-          } else {
-            // Fallback: Manuellen Play-Button anzeigen
-            showManualPlayButton(url);
-          }
-        });
-    }
+    // Promise zurückgeben für sequentielle Wiedergabe
+    return new Promise((resolve) => {
+      source.onended = () => {
+        console.log('✅ Audio playback finished');
+        resolve();
+      };
+    });
     
-    audio.onended = () => URL.revokeObjectURL(url);
   } catch (e) {
-    console.error('Failed to play audio:', e);
+    console.error('Web Audio API playback error:', e);
+    throw e;
   }
 }
 
-// Manueller Play-Button als Fallback für iOS
-function showManualPlayButton(audioUrl) {
+// Haupt-Abspielfunktion mit Fallback
+async function playAudio(base64Audio, retryCount = 0) {
+  try {
+    // PRIMÄR: Web Audio API verwenden
+    await playAudioViaWebAudioAPI(base64Audio);
+    
+  } catch (primaryError) {
+    console.error('Primary playback failed:', primaryError);
+    
+    // FALLBACK 1: Retry einmal
+    if (retryCount < 1) {
+      console.log('🔄 Retrying with Web Audio API...');
+      await new Promise(resolve => setTimeout(resolve, 300));
+      return playAudio(base64Audio, retryCount + 1);
+    }
+    
+    // FALLBACK 2: Klassisches Audio-Element als letzte Option
+    console.log('⚠️ Falling back to Audio element');
+    try {
+      const binaryString = atob(base64Audio);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: 'audio/mpeg' });
+      const url = URL.createObjectURL(blob);
+      
+      const audio = new Audio(url);
+      audio.load();
+      
+      await audio.play();
+      console.log('🔊 Fallback: Audio element succeeded');
+      
+      audio.onended = () => URL.revokeObjectURL(url);
+      
+    } catch (fallbackError) {
+      console.error('Fallback also failed:', fallbackError);
+      // FALLBACK 3: Manueller Button
+      showManualPlayButton(base64Audio);
+    }
+  }
+}
+
+// Manueller Play-Button als letzter Fallback
+function showManualPlayButton(base64Audio) {
   const existing = document.getElementById('manual-play-btn');
-  if (existing) return; // Nur einen Button anzeigen
+  if (existing) existing.remove();
   
   const playBtn = document.createElement('button');
   playBtn.id = 'manual-play-btn';
-  playBtn.textContent = '🔊 Play Audio';
+  playBtn.textContent = '🔊 Tap to Play Audio';
   playBtn.style.cssText = `
     position: fixed;
     bottom: 20px;
@@ -124,30 +142,33 @@ function showManualPlayButton(audioUrl) {
     background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
     color: white;
     border: none;
-    padding: 12px 20px;
-    border-radius: 25px;
+    padding: 16px 24px;
+    border-radius: 30px;
     font-size: 16px;
     font-weight: bold;
     cursor: pointer;
     z-index: 1000;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.3);
     animation: pulse 1.5s infinite;
   `;
   
-  playBtn.onclick = () => {
-    const audio = new Audio(audioUrl);
-    audio.play()
-      .then(() => {
-        console.log('🔊 Manual audio play successful');
-        playBtn.remove();
-      })
-      .catch(err => console.error('Manual play failed:', err));
+  playBtn.onclick = async () => {
+    try {
+      await playAudioViaWebAudioAPI(base64Audio);
+      playBtn.remove();
+    } catch (e) {
+      console.error('Manual play failed:', e);
+      add('ai', '⚠️ Audio playback not supported on this device');
+      playBtn.remove();
+    }
   };
   
   document.body.appendChild(playBtn);
   
-  // Auto-remove nach 10 Sekunden
-  setTimeout(() => playBtn.remove(), 10000);
+  // Auto-remove nach 15 Sekunden
+  setTimeout(() => {
+    if (playBtn.parentNode) playBtn.remove();
+  }, 15000);
 }
 
 function initSpeechRecognition() {
@@ -179,7 +200,6 @@ function initSpeechRecognition() {
     
     txt.value = transcript;
     
-    // Wenn finales Ergebnis
     if (event.results[0].isFinal) {
       console.log('Final transcript:', transcript);
     }
@@ -191,7 +211,6 @@ function initSpeechRecognition() {
     voiceBtn.innerHTML = '🎤 Speak';
     txt.placeholder = 'Or type your answer...';
     
-    // Automatisch senden wenn Text vorhanden
     if (txt.value.trim()) {
       setTimeout(() => sendBtn.click(), 500);
     }
@@ -277,14 +296,14 @@ connectBtn.onclick = async () => {
   
   add('ai', '🔌 Connecting to server...');
   
-  // WICHTIG: Audio mit Test-Sound entsperren (iOS Fix!)
-  add('ai', '🔊 Preparing audio... (you might hear a brief tone)');
+  // Audio mit Test-Sound entsperren (iOS-kritisch!)
+  add('ai', '🔊 Initializing audio system... (you may hear a brief tone)');
   const audioReady = await unlockAudioWithSound();
   
   if (audioReady) {
-    add('ai', '✅ Audio system ready!');
+    add('ai', '✅ Audio system ready! Using Web Audio API for reliable playback.');
   } else {
-    add('ai', '⚠️ Audio might need manual activation.');
+    add('ai', '⚠️ Audio might need manual activation on this device.');
   }
 
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -297,7 +316,7 @@ connectBtn.onclick = async () => {
   ws.onopen = () => {
     console.log('✅ WebSocket connected');
     
-    add('ai', '✅ Connected! Initializing AI with high-quality voice...');
+    add('ai', '✅ Connected! Starting conversation with AI voice coach...');
     
     ws.send(JSON.stringify({
       type: 'client.init',
@@ -316,7 +335,6 @@ connectBtn.onclick = async () => {
       voiceBtn.style.display = 'block';
     }
     
-    // Speech Recognition initialisieren
     initSpeechRecognition();
     
     txt.focus();
@@ -345,9 +363,9 @@ connectBtn.onclick = async () => {
           add('ai', msg.text);
         }
         
-        // OpenAI TTS Audio abspielen
+        // Audio über Web Audio API abspielen
         if (msg.audio) {
-          playAudio(msg.audio);
+          await playAudio(msg.audio);
         }
         return;
       }
