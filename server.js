@@ -3,7 +3,6 @@ import express from 'express';
 import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { randomUUID as uuidv4 } from 'crypto';
-import multer from 'multer';
 
 const app = express();
 const server = http.createServer(app);
@@ -21,10 +20,7 @@ app.use((req, res, next) => {
 });
 
 app.use(express.static('public'));
-app.use(express.json());
-
-// Multer für File-Upload (Whisper)
-const upload = multer({ storage: multer.memoryStorage() });
+app.use(express.json({ limit: '10mb' })); // Größeres Limit für Base64 Audio
 
 app.get('/envcheck', (_, res) => {
   const key = process.env.OPENAI_API_KEY || '';
@@ -269,7 +265,7 @@ app.post('/api/vocab/get-words', (req, res) => {
       return res.status(404).json({ error: 'Vocabulary not found' });
     }
     
-    // Shuffle für Abwechslung
+    // Shuffle
     const shuffled = [...words].sort(() => Math.random() - 0.5);
     
     res.json({ words: shuffled });
@@ -281,22 +277,24 @@ app.post('/api/vocab/get-words', (req, res) => {
 });
 
 // ========================================
-// API: Whisper Transkription + Bewertung
+// API: Whisper (Base64 Audio)
 // ========================================
-app.post('/api/vocab/check-pronunciation', upload.single('audio'), async (req, res) => {
+app.post('/api/vocab/check-pronunciation', async (req, res) => {
   try {
-    const { expectedWord } = req.body;
-    const audioFile = req.file;
+    const { audioBase64, expectedWord } = req.body;
     
-    if (!audioFile || !expectedWord) {
+    if (!audioBase64 || !expectedWord) {
       return res.status(400).json({ error: 'Missing audio or expectedWord' });
     }
     
     console.log('🎤 Checking pronunciation for:', expectedWord);
     
-    // Whisper API aufrufen
+    // Base64 → Buffer → Blob
+    const audioBuffer = Buffer.from(audioBase64, 'base64');
+    
+    // Whisper API
     const formData = new FormData();
-    formData.append('file', new Blob([audioFile.buffer], { type: 'audio/webm' }), 'audio.webm');
+    formData.append('file', new Blob([audioBuffer], { type: 'audio/webm' }), 'audio.webm');
     formData.append('model', 'whisper-1');
     formData.append('language', 'en');
     formData.append('response_format', 'verbose_json');
@@ -321,16 +319,13 @@ app.post('/api/vocab/check-pronunciation', upload.single('audio'), async (req, r
     console.log('📝 Transcribed:', transcribed);
     console.log('✓ Expected:', expected);
     
-    // Vergleichen
     const isCorrect = transcribed === expected || 
                       transcribed.includes(expected) ||
                       expected.includes(transcribed);
     
-    // Confidence berechnen (wenn verfügbar)
     const avgConfidence = whisperData.segments?.reduce((sum, seg) => sum + (seg.avg_logprob || 0), 0) / (whisperData.segments?.length || 1);
     const pronunciationScore = Math.max(0, Math.min(5, Math.round((1 + avgConfidence / 0.5) * 5)));
     
-    // Typische Fehler erkennen
     const commonErrors = detectCommonErrors(expected, transcribed);
     
     res.json({
@@ -347,21 +342,17 @@ app.post('/api/vocab/check-pronunciation', upload.single('audio'), async (req, r
   }
 });
 
-// Typische Fehler deutscher Englisch-Lerner
 function detectCommonErrors(expected, actual) {
   const tips = [];
   
-  // TH-Sound Problem
   if (expected.includes('th') && (actual.includes('s') || actual.includes('z'))) {
     tips.push('💡 Tipp: Für "th" die Zunge zwischen die Zähne!');
   }
   
-  // W-Sound Problem
   if (expected.startsWith('w') && actual.startsWith('v')) {
     tips.push('💡 Tipp: "w" wie "u" aussprechen, Lippen rund!');
   }
   
-  // V-Sound Problem
   if (expected.includes('v') && actual.includes('w')) {
     tips.push('💡 Tipp: Für "v" leicht auf Unterlippe beißen!');
   }
@@ -370,10 +361,9 @@ function detectCommonErrors(expected, actual) {
 }
 
 // ========================================
-// DIALOG-LAB (Bestehendes System)
+// DIALOG-LAB (Bestehendes System - unverändert)
 // ========================================
 
-// Vokabel-Ziele (für Dialog-Lab)
 const TARGETS = {
   shop: ['price', 'cheap', 'expensive', 'how much', 'kilo', 'cash', 'card', 'change'],
   airport: ['passport', 'boarding pass', 'gate', 'destination', 'luggage', 'customs'],
@@ -438,7 +428,6 @@ async function generateSpeech(text) {
   return Buffer.from(audioBuffer);
 }
 
-// Teacher-Dashboard
 wssTeacher.on('connection', ws => {
   const snapshot = Array.from(sessions.entries()).map(([id, s]) => ({ 
     id, 
@@ -459,7 +448,6 @@ function broadcastToTeachers(data) {
   }
 }
 
-// Student WebSocket (Dialog-Lab)
 wssStudent.on('connection', client => {
   const sid = uuidv4();
   
