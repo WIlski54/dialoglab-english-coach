@@ -453,3 +453,16 @@ if (voiceBtn) {
   voiceBtn.disabled = true;
   voiceBtn.style.display = 'none';
 }
+
+// Szenario-Bild dynamisch wechseln
+const scenarioSelect = document.getElementById('scenario');
+const scenarioImg = document.getElementById('scenario-img');
+
+if (scenarioSelect && scenarioImg) {
+  scenarioSelect.addEventListener('change', (e) => {
+    const scenario = e.target.value;
+    scenarioImg.src = `/${scenario}.png`;
+    scenarioImg.alt = scenarioSelect.options[scenarioSelect.selectedIndex].text;
+    console.log('Scenario changed to:', scenario);
+  });
+}
