@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DialogLab - Vokabel-Training</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body { 
+      font-family: system-ui, sans-serif;
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    
+    /* Header */
+    .header {
+      background: white;
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .header h1 {
+      color: #333;
+      font-size: 24px;
+    }
+    
+    .back-btn {
+      background: #e8f4f8;
+      color: #667eea;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    
+    /* Setup-Bereich */
+    .setup {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    }
+    
+    .setup h2 {
+      color: #333;
+      margin-bottom: 16px;
+    }
+    
+    .setup-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 12px;
+      align-items: end;
+    }
+    
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-weight: 500;
+      color: #555;
+    }
+    
+    select {
+      padding: 10px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      font-size: 15px;
+    }
+    
+    .start-btn {
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    
+    .start-btn:hover {
+      transform: translateY(-2px);
+    }
+    
+    /* Quiz-Bereich */
+    .quiz {
+      background: white;
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+      min-height: 400px;
+      display: none;
+    }
+    
+    .quiz.active {
+      display: block;
+    }
+    
+    .progress {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 2px solid #f0f0f0;
+    }
+    
+    .progress-item {
+      text-align: center;
+    }
+    
+    .progress-label {
+      font-size: 12px;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .progress-value {
+      font-size: 24px;
+      font-weight: bold;
+      color: #333;
+      margin-top: 4px;
+    }
+    
+    .question-card {
+      text-align: center;
+      padding: 40px 20px;
+    }
+    
+    .question-card h2 {
+      color: #888;
+      font-size: 18px;
+      margin-bottom: 16px;
+    }
+    
+    .word-to-translate {
+      font-size: 48px;
+      font-weight: bold;
+      color: #333;
+      margin: 20px 0;
+    }
+    
+    .hint {
+      color: #888;
+      font-size: 14px;
+      font-style: italic;
+    }
+    
+    /* Antwort-Bereich */
+    .answer-section {
+      margin-top: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      align-items: center;
+    }
+    
+    .record-btn {
+      background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+      color: white;
+      border: none;
+      padding: 20px 40px;
+      border-radius: 50px;
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 4px 12px rgba(250, 112, 154, 0.3);
+    }
+    
+    .record-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 20px rgba(250, 112, 154, 0.4);
+    }
+    
+    .record-btn.recording {
+      animation: pulse 1.5s infinite;
+      background: linear-gradient(135deg, #ff4444 0%, #ff6b6b 100%);
+    }
+    
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+    
+    .or-divider {
+      color: #888;
+      font-size: 14px;
+    }
+    
+    .text-input {
+      display: flex;
+      gap: 8px;
+      width: 100%;
+      max-width: 400px;
+    }
+    
+    .text-input input {
+      flex: 1;
+      padding: 12px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      font-size: 16px;
+    }
+    
+    .submit-btn {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    
+    /* Feedback */
+    .feedback {
+      margin-top: 24px;
+      padding: 20px;
+      border-radius: 12px;
+      display: none;
+    }
+    
+    .feedback.show {
+      display: block;
+      animation: slideIn 0.3s ease-out;
+    }
+    
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .feedback.correct {
+      background: #d1fae5;
+      border: 2px solid #10b981;
+    }
+    
+    .feedback.incorrect {
+      background: #fee2e2;
+      border: 2px solid #ef4444;
+    }
+    
+    .feedback-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+    
+    .feedback-text {
+      font-size: 18px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 8px;
+    }
+    
+    .feedback-details {
+      font-size: 14px;
+      color: #666;
+      margin-top: 8px;
+    }
+    
+    .next-btn {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 12px 32px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 16px;
+    }
+    
+    /* Ergebnis-Bildschirm */
+    .results {
+      display: none;
+      text-align: center;
+    }
+    
+    .results.show {
+      display: block;
+    }
+    
+    .score-circle {
+      width: 200px;
+      height: 200px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin: 32px auto;
+      color: white;
+    }
+    
+    .score-percentage {
+      font-size: 48px;
+      font-weight: bold;
+    }
+    
+    .score-label {
+      font-size: 16px;
+    }
+    
+    .results h2 {
+      color: #333;
+      margin-bottom: 16px;
+    }
+    
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin: 24px 0;
+    }
+    
+    .stat {
+      background: #f8f9fa;
+      padding: 16px;
+      border-radius: 8px;
+    }
+    
+    .stat-value {
+      font-size: 32px;
+      font-weight: bold;
+      color: #333;
+    }
+    
+    .stat-label {
+      font-size: 14px;
+      color: #666;
+      margin-top: 4px;
+    }
+    
+    .action-buttons {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 24px;
+    }
+    
+    @media (max-width: 768px) {
+      .setup-controls {
+        grid-template-columns: 1fr;
+      }
+      
+      .stats {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>📚 Vokabel-Training</h1>
+      <a href="/index.html" class="back-btn">← Zurück</a>
+    </div>
+    
+    <!-- Setup -->
+    <div class="setup" id="setup">
+      <h2>Wähle dein Thema</h2>
+      <div class="setup-controls">
+        <label>
+          Szenario:
+          <select id="scenario">
+            <option value="shop">🛒 Einkaufen</option>
+            <option value="airport">✈️ Flughafen</option>
+            <option value="school">📚 Schule</option>
+            <option value="food">🍽️ Restaurant</option>
+            <option value="present">🎁 Geschenke</option>
+          </select>
+        </label>
+        
+        <label>
+          Schwierigkeit:
+          <select id="difficulty">
+            <option value="easy">⭐ Einfach (5 Wörter)</option>
+            <option value="medium" selected>⭐⭐ Mittel (10 Wörter)</option>
+            <option value="hard">⭐⭐⭐ Schwer (15 Wörter)</option>
+          </select>
+        </label>
+        
+        <button class="start-btn" id="start-btn">Start!</button>
+      </div>
+    </div>
+    
+    <!-- Quiz -->
+    <div class="quiz" id="quiz">
+      <!-- Fortschritt -->
+      <div class="progress">
+        <div class="progress-item">
+          <div class="progress-label">Frage</div>
+          <div class="progress-value" id="current-question">1</div>
+        </div>
+        <div class="progress-item">
+          <div class="progress-label">Punkte</div>
+          <div class="progress-value" id="score">0</div>
+        </div>
+        <div class="progress-item">
+          <div class="progress-label">Streak</div>
+          <div class="progress-value" id="streak">0🔥</div>
+        </div>
+      </div>
+      
+      <!-- Frage -->
+      <div class="question-card">
+        <h2>Übersetze ins Englische:</h2>
+        <div class="word-to-translate" id="german-word">Apfel</div>
+        <div class="hint">Sprich klar und deutlich!</div>
+      </div>
+      
+      <!-- Antwort -->
+      <div class="answer-section">
+        <button class="record-btn" id="record-btn">
+          🎤 Aufnehmen & Sprechen
+        </button>
+        
+        <div class="or-divider">oder</div>
+        
+        <div class="text-input">
+          <input type="text" id="text-answer" placeholder="Tippe die Antwort...">
+          <button class="submit-btn" id="submit-btn">✓</button>
+        </div>
+      </div>
+      
+      <!-- Feedback -->
+      <div class="feedback" id="feedback">
+        <div class="feedback-icon">✅</div>
+        <div class="feedback-text">Richtig!</div>
+        <div class="feedback-details">
+          Du hast "<strong>apple</strong>" gesagt. 
+          Aussprache: ⭐⭐⭐⭐⭐
+        </div>
+        <button class="next-btn" id="next-btn">Nächstes Wort →</button>
+      </div>
+      
+      <!-- Ergebnis -->
+      <div class="results" id="results">
+        <h2>🎉 Training abgeschlossen!</h2>
+        
+        <div class="score-circle">
+          <div class="score-percentage" id="final-percentage">85%</div>
+          <div class="score-label">Erreicht</div>
+        </div>
+        
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-value" id="total-correct">8</div>
+            <div class="stat-label">Richtig</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value" id="total-wrong">2</div>
+            <div class="stat-label">Falsch</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value" id="best-streak">5🔥</div>
+            <div class="stat-label">Beste Serie</div>
+          </div>
+        </div>
+        
+        <div class="action-buttons">
+          <button class="start-btn" onclick="location.reload()">🔄 Nochmal</button>
+          <a href="/dialog-lab.html" class="start-btn">💬 Zum Dialog-Lab</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script src="./vocab-client.js"></script>
+</body>
+</html>
