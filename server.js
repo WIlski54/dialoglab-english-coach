@@ -277,7 +277,7 @@ app.post('/api/vocab/get-words', (req, res) => {
 });
 
 // ========================================
-// API: Whisper (Base64 Audio)
+// API: Whisper Transkription + Bewertung
 // ========================================
 app.post('/api/vocab/check-pronunciation', async (req, res) => {
   try {
@@ -319,13 +319,16 @@ app.post('/api/vocab/check-pronunciation', async (req, res) => {
     console.log('📝 Transcribed:', transcribed);
     console.log('✓ Expected:', expected);
     
+    // Vergleichen
     const isCorrect = transcribed === expected || 
                       transcribed.includes(expected) ||
                       expected.includes(transcribed);
     
+    // Confidence Score berechnen
     const avgConfidence = whisperData.segments?.reduce((sum, seg) => sum + (seg.avg_logprob || 0), 0) / (whisperData.segments?.length || 1);
     const pronunciationScore = Math.max(0, Math.min(5, Math.round((1 + avgConfidence / 0.5) * 5)));
     
+    // Typische Fehler erkennen
     const commonErrors = detectCommonErrors(expected, transcribed);
     
     res.json({
@@ -342,17 +345,21 @@ app.post('/api/vocab/check-pronunciation', async (req, res) => {
   }
 });
 
+// Typische Fehler deutscher Englisch-Lerner
 function detectCommonErrors(expected, actual) {
   const tips = [];
   
+  // TH-Sound Problem
   if (expected.includes('th') && (actual.includes('s') || actual.includes('z'))) {
     tips.push('💡 Tipp: Für "th" die Zunge zwischen die Zähne!');
   }
   
+  // W-Sound Problem
   if (expected.startsWith('w') && actual.startsWith('v')) {
     tips.push('💡 Tipp: "w" wie "u" aussprechen, Lippen rund!');
   }
   
+  // V-Sound Problem
   if (expected.includes('v') && actual.includes('w')) {
     tips.push('💡 Tipp: Für "v" leicht auf Unterlippe beißen!');
   }
@@ -361,9 +368,10 @@ function detectCommonErrors(expected, actual) {
 }
 
 // ========================================
-// DIALOG-LAB (Bestehendes System - unverändert)
+// DIALOG-LAB (Bestehendes System)
 // ========================================
 
+// Vokabel-Ziele für Dialog-Lab
 const TARGETS = {
   shop: ['price', 'cheap', 'expensive', 'how much', 'kilo', 'cash', 'card', 'change'],
   airport: ['passport', 'boarding pass', 'gate', 'destination', 'luggage', 'customs'],
@@ -428,6 +436,7 @@ async function generateSpeech(text) {
   return Buffer.from(audioBuffer);
 }
 
+// Teacher-Dashboard
 wssTeacher.on('connection', ws => {
   const snapshot = Array.from(sessions.entries()).map(([id, s]) => ({ 
     id, 
@@ -448,6 +457,7 @@ function broadcastToTeachers(data) {
   }
 }
 
+// Student WebSocket (Dialog-Lab)
 wssStudent.on('connection', client => {
   const sid = uuidv4();
   
