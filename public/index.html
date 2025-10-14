@@ -5,31 +5,142 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>DialogLab – English Coach</title>
   <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
     body { 
       font: 16px/1.4 system-ui, sans-serif; 
-      max-width: 900px; 
-      margin: 0 auto; 
-      padding: 16px;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       min-height: 100vh;
+      padding: 16px;
     }
-    .container {
+    
+    .main-container {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 2fr;
+      gap: 20px;
+      align-items: start;
+    }
+    
+    /* Coach Bereich - Links */
+    .coach-section {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+      position: sticky;
+      top: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+    
+    .coach-image {
+      width: 100%;
+      max-width: 300px;
+      height: auto;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .coach-info {
+      text-align: center;
+    }
+    
+    .coach-info h2 {
+      color: #333;
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+    
+    .coach-info p {
+      color: #666;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    
+    /* Haupt-Chat-Bereich - Rechts */
+    .chat-section {
       background: white;
       border-radius: 16px;
       padding: 24px;
       box-shadow: 0 8px 32px rgba(0,0,0,0.1);
     }
+    
+    .header-with-scenario {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      gap: 20px;
+    }
+    
+    .header-content {
+      flex: 1;
+    }
+    
     h1 { 
-      margin: 0 0 20px 0; 
       color: #333;
       font-size: 28px;
+      margin-bottom: 8px;
     }
-    .row { 
-      display: flex; 
-      gap: 8px; 
-      margin: 12px 0; 
-      flex-wrap: wrap;
+    
+    .scenario-image {
+      width: 150px;
+      height: 150px;
+      object-fit: cover;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      transition: transform 0.3s ease;
     }
+    
+    .scenario-image:hover {
+      transform: scale(1.05);
+    }
+    
+    .info-box {
+      background: #e8f4f8;
+      padding: 12px;
+      border-radius: 8px;
+      border-left: 4px solid #667eea;
+      margin: 12px 0;
+    }
+    
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 12px;
+      margin: 16px 0;
+    }
+    
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    
+    select, input, button {
+      padding: 10px 14px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 15px;
+      font-family: inherit;
+    }
+    
+    select:focus, input:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    
     .chat { 
       border: 1px solid #ddd; 
       border-radius: 12px; 
@@ -39,6 +150,7 @@
       background: #fafafa;
       margin: 16px 0;
     }
+    
     .bubble { 
       margin: 8px 0; 
       padding: 10px 14px; 
@@ -47,52 +159,40 @@
       word-wrap: break-word;
       animation: slideIn 0.3s ease-out;
     }
+    
     @keyframes slideIn {
       from { opacity: 0; transform: translateY(10px); }
       to { opacity: 1; transform: translateY(0); }
     }
+    
     .me { 
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
       margin-left: auto;
       border-bottom-right-radius: 4px;
     }
+    
     .ai { 
       background: #e8f4f8;
       color: #333;
       border-bottom-left-radius: 4px;
     }
+    
     .loading {
       opacity: 0.7;
       font-style: italic;
     }
-    .small { 
-      font-size: 13px; 
-      opacity: .7;
-      margin: 8px 0;
-    }
-    label {
+    
+    .input-group {
       display: flex;
-      flex-direction: column;
-      gap: 4px;
-      font-size: 14px;
-      font-weight: 500;
+      gap: 8px;
+      align-items: stretch;
     }
-    select, input, button {
-      padding: 10px 14px;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      font-size: 15px;
-      font-family: inherit;
-    }
-    select:focus, input:focus {
-      outline: none;
-      border-color: #667eea;
-      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    }
+    
     input {
       flex: 1;
     }
+    
     button {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
@@ -101,51 +201,38 @@
       font-weight: 600;
       transition: transform 0.2s, box-shadow 0.2s;
     }
+    
     button:hover:not(:disabled) {
       transform: translateY(-2px);
       box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
     }
+    
     button:disabled {
       opacity: 0.5;
       cursor: not-allowed;
     }
-    .info-box {
-      background: #e8f4f8;
-      padding: 12px;
-      border-radius: 8px;
-      border-left: 4px solid #667eea;
-      margin: 12px 0;
-    }
+    
     #voice-btn {
       background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
       min-width: 120px;
-      position: relative;
-      overflow: hidden;
     }
+    
     #voice-btn.recording {
       background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
       animation: pulse 1.5s infinite;
     }
+    
     @keyframes pulse {
       0%, 100% { transform: scale(1); }
       50% { transform: scale(1.05); }
     }
     
-    /* Manual Play Button Animation */
-    @keyframes slideInRight {
-      from { transform: translateX(100px); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
+    .small { 
+      font-size: 13px; 
+      opacity: .7;
+      margin: 8px 0;
     }
     
-    #manual-play-btn {
-      animation: slideInRight 0.3s ease-out, pulse 1.5s infinite 0.3s !important;
-    }
-    
-    .input-group {
-      display: flex;
-      gap: 8px;
-      align-items: stretch;
-    }
     .voice-hint {
       background: #fff3cd;
       border: 1px solid #ffc107;
@@ -157,68 +244,128 @@
       align-items: center;
       gap: 8px;
     }
+    
+    /* Responsive Design */
+    @media (max-width: 1024px) {
+      .main-container {
+        grid-template-columns: 1fr;
+      }
+      
+      .coach-section {
+        position: relative;
+        top: 0;
+      }
+      
+      .header-with-scenario {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      
+      .scenario-image {
+        width: 120px;
+        height: 120px;
+      }
+    }
+    
+    @media (max-width: 768px) {
+      .controls {
+        grid-template-columns: 1fr;
+      }
+      
+      .coach-image {
+        max-width: 200px;
+      }
+      
+      .scenario-image {
+        width: 100px;
+        height: 100px;
+      }
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>🎓 DialogLab – English Coach</h1>
-    
-    <div class="info-box">
-      <strong>🎯 Practice English in real-life situations!</strong><br>
-      Choose a scenario and your level, then start a voice conversation with the AI coach.
+  <div class="main-container">
+    <!-- Coach Bereich - Links -->
+    <div class="coach-section">
+      <img src="/coach.png" alt="Your English Coach" class="coach-image" id="coach-img">
+      <div class="coach-info">
+        <h2>🎓 Your AI Coach</h2>
+        <p>Hi! I'm your personal English conversation coach. Choose a scenario and let's practice together! I'll help you improve your speaking skills in real-life situations.</p>
+      </div>
     </div>
     
-    <div class="row">
-      <label>
-        Scenario:
-        <select id="scenario">
-          <option value="shop">🛒 At the Shop</option>
-          <option value="airport">✈️ At the Airport</option>
-          <option value="school">📚 At School</option>
-          <option value="food">🍽️ Ordering Food</option>
-          <option value="present">🎁 Buying a Present</option>
-        </select>
-      </label>
+    <!-- Chat Bereich - Rechts -->
+    <div class="chat-section">
+      <div class="header-with-scenario">
+        <div class="header-content">
+          <h1>🎯 DialogLab – English Coach</h1>
+          <div class="info-box">
+            <strong>Practice English in real-life situations!</strong><br>
+            Choose a scenario and your level, then start a voice conversation.
+          </div>
+        </div>
+        <img src="/shop.png" alt="Scenario" class="scenario-image" id="scenario-img">
+      </div>
       
-      <label>
-        Level:
-        <select id="level">
-          <option value="A1">A1 (Beginner)</option>
-          <option value="A2" selected>A2 (Elementary)</option>
-          <option value="B1">B1 (Intermediate)</option>
-        </select>
-      </label>
+      <div class="controls">
+        <label>
+          Scenario:
+          <select id="scenario">
+            <option value="shop">🛒 At the Shop</option>
+            <option value="airport">✈️ At the Airport</option>
+            <option value="school">📚 At School</option>
+            <option value="food">🍽️ Ordering Food</option>
+            <option value="present">🎁 Buying a Present</option>
+          </select>
+        </label>
+        
+        <label>
+          Level:
+          <select id="level">
+            <option value="A1">A1 (Beginner)</option>
+            <option value="A2" selected>A2 (Elementary)</option>
+            <option value="B1">B1 (Intermediate)</option>
+          </select>
+        </label>
+        
+        <button id="connect" style="align-self: flex-end;">🚀 Connect</button>
+      </div>
+
+      <div id="chat" class="chat"></div>
+
+      <div class="voice-hint" id="voice-hint" style="display: none;">
+        🎤 <strong>Voice Mode Active!</strong> Click the microphone button and speak in English.
+      </div>
+
+      <div class="input-group">
+        <button id="voice-btn" title="Click to speak">🎤 Speak</button>
+        <input id="text" placeholder="Or type your answer..." />
+        <button id="send">📤 Send</button>
+      </div>
       
-      <button id="connect" style="align-self: flex-end;">🚀 Connect</button>
+      <p class="small">
+        🎤 <strong>Voice Input:</strong> Click the microphone and speak! The AI will respond with high-quality voice.
+        Press <strong>Enter</strong> to send text messages.
+      </p>
     </div>
-
-    <div id="chat" class="chat"></div>
-
-    <div class="voice-hint" id="voice-hint" style="display: none;">
-      🎤 <strong>Voice Mode Active!</strong> Click the microphone button and speak in English.
-    </div>
-
-    <div class="input-group">
-      <button id="voice-btn" title="Click to speak">🎤 Speak</button>
-      <input id="text" placeholder="Or type your answer..." />
-      <button id="send">📤 Send</button>
-    </div>
-    
-    <p class="small">
-      🎤 <strong>Voice Input:</strong> Click the microphone and speak! The AI will respond with high-quality voice.
-      Press <strong>Enter</strong> to send text messages.
-    </p>
   </div>
 
   <script src="./client.js"></script>
   <script>
+    // Szenario-Bild dynamisch wechseln
+    const scenarioSelect = document.getElementById('scenario');
+    const scenarioImg = document.getElementById('scenario-img');
+    
+    scenarioSelect.addEventListener('change', (e) => {
+      const scenario = e.target.value;
+      scenarioImg.src = `/${scenario}.png`;
+      scenarioImg.alt = scenarioSelect.options[scenarioSelect.selectedIndex].text;
+    });
+    
     // Voice hint anzeigen wenn connected
     const voiceBtn = document.getElementById('voice-btn');
     const voiceHint = document.getElementById('voice-hint');
     
-    const originalOnOpen = WebSocket.prototype.addEventListener;
-    
-    // Zeige Voice Hint nach Connect
     document.getElementById('connect').addEventListener('click', () => {
       setTimeout(() => {
         if (voiceBtn && !voiceBtn.disabled) {
