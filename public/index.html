@@ -280,6 +280,30 @@
         height: 100px;
       }
     }
+    
+    /* Logo am unteren linken Rand */
+    .footer-logo {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      width: 150px;
+      height: auto;
+      z-index: 100;
+      opacity: 0.9;
+      transition: opacity 0.3s ease;
+    }
+    
+    .footer-logo:hover {
+      opacity: 1;
+    }
+    
+    @media (max-width: 768px) {
+      .footer-logo {
+        width: 100px;
+        bottom: 12px;
+        left: 12px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -348,6 +372,9 @@
       </p>
     </div>
   </div>
+
+  <!-- Logo am unteren linken Rand -->
+  <img src="/LogoWK.png" alt="Logo" class="footer-logo">
 
   <script src="./client.js"></script>
   <script>
