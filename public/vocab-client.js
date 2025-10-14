@@ -186,19 +186,22 @@ recordBtn.addEventListener('click', () => {
 });
 
 // ========================================
-// AUSSPRACHE PRÜFEN (WHISPER API)
+// AUSSPRACHE PRÜFEN (WHISPER API mit Base64)
 // ========================================
 async function checkPronunciation(audioBlob) {
   const word = words[currentIndex];
   
   try {
-    const formData = new FormData();
-    formData.append('audio', audioBlob, 'recording.webm');
-    formData.append('expectedWord', word.en);
+    // Audio Blob zu Base64 konvertieren
+    const base64Audio = await blobToBase64(audioBlob);
     
     const response = await fetch('/api/vocab/check-pronunciation', {
       method: 'POST',
-      body: formData
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        audioBase64: base64Audio,
+        expectedWord: word.en
+      })
     });
     
     if (!response.ok) throw new Error('Pronunciation check failed');
@@ -212,6 +215,19 @@ async function checkPronunciation(audioBlob) {
     alert('Fehler bei der Aussprache-Prüfung. Versuche es nochmal!');
     recordBtn.disabled = false;
   }
+}
+
+// Blob zu Base64 konvertieren
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = reader.result.split(',')[1]; // Remove data:audio/webm;base64,
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 }
 
 // ========================================
