@@ -1,6 +1,6 @@
 {
   "name": "dialoglab-realtime-en",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "start": "node server.js",
@@ -10,6 +10,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1",
     "uuid": "^9.0.1",
     "ws": "^8.17.0"
   }
