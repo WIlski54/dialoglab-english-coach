@@ -352,16 +352,6 @@
 
   <script src="./client.js"></script>
   <script>
-    // Szenario-Bild dynamisch wechseln
-    const scenarioSelect = document.getElementById('scenario');
-    const scenarioImg = document.getElementById('scenario-img');
-    
-    scenarioSelect.addEventListener('change', (e) => {
-      const scenario = e.target.value;
-      scenarioImg.src = `/${scenario}.png`;
-      scenarioImg.alt = scenarioSelect.options[scenarioSelect.selectedIndex].text;
-    });
-    
     // Voice hint anzeigen wenn connected
     const voiceBtn = document.getElementById('voice-btn');
     const voiceHint = document.getElementById('voice-hint');
