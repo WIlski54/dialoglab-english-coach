@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lehrer Login - DialogLab</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: system-ui, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .login-container {
+      background: white;
+      border-radius: 20px;
+      padding: 48px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-width: 450px;
+      width: 100%;
+    }
+    
+    .login-header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    
+    .login-icon {
+      font-size: 72px;
+      margin-bottom: 16px;
+    }
+    
+    h1 {
+      font-size: 32px;
+      color: #333;
+      margin-bottom: 8px;
+    }
+    
+    .subtitle {
+      color: #666;
+      font-size: 16px;
+    }
+    
+    .form-group {
+      margin-bottom: 24px;
+    }
+    
+    label {
+      display: block;
+      color: #555;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    
+    input {
+      width: 100%;
+      padding: 14px 16px;
+      border: 2px solid #e5e7eb;
+      border-radius: 10px;
+      font-size: 16px;
+      transition: border-color 0.3s;
+    }
+    
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    
+    .btn-login {
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    
+    .btn-login:hover {
+      transform: translateY(-2px);
+    }
+    
+    .btn-login:active {
+      transform: translateY(0);
+    }
+    
+    .error-message {
+      background: #fee2e2;
+      color: #991b1b;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 24px;
+      display: none;
+      animation: shake 0.5s;
+    }
+    
+    .error-message.show {
+      display: block;
+    }
+    
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-10px); }
+      75% { transform: translateX(10px); }
+    }
+    
+    .back-link {
+      text-align: center;
+      margin-top: 24px;
+    }
+    
+    .back-link a {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    
+    .back-link a:hover {
+      text-decoration: underline;
+    }
+    
+    .password-toggle {
+      position: relative;
+    }
+    
+    .toggle-btn {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 20px;
+      padding: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <!-- Header -->
+    <div class="login-header">
+      <div class="login-icon">🔐</div>
+      <h1>Lehrer-Login</h1>
+      <p class="subtitle">Zugang zum Bild-Quiz Dashboard</p>
+    </div>
+    
+    <!-- Error Message -->
+    <div class="error-message" id="error-message">
+      ❌ Falsches Passwort! Bitte versuche es erneut.
+    </div>
+    
+    <!-- Login Form -->
+    <form id="login-form">
+      <div class="form-group">
+        <label for="password">Passwort</label>
+        <div class="password-toggle">
+          <input 
+            type="password" 
+            id="password" 
+            placeholder="Gib dein Lehrer-Passwort ein" 
+            autocomplete="off"
+            required
+          >
+          <button type="button" class="toggle-btn" id="toggle-password">
+            👁️
+          </button>
+        </div>
+      </div>
+      
+      <button type="submit" class="btn-login">
+        🚀 Zum Dashboard
+      </button>
+    </form>
+    
+    <!-- Back Link -->
+    <div class="back-link">
+      <a href="/index.html">← Zurück zur Startseite</a>
+    </div>
+  </div>
+  
+  <script>
+    const form = document.getElementById('login-form');
+    const passwordInput = document.getElementById('password');
+    const errorMessage = document.getElementById('error-message');
+    const toggleBtn = document.getElementById('toggle-password');
+    
+    // Passwort anzeigen/verbergen
+    toggleBtn.addEventListener('click', () => {
+      if (passwordInput.type === 'password') {
+        passwordInput.type = 'text';
+        toggleBtn.textContent = '🙈';
+      } else {
+        passwordInput.type = 'password';
+        toggleBtn.textContent = '👁️';
+      }
+    });
+    
+    // Form Submit
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const password = passwordInput.value;
+      
+      try {
+        // API-Call zum Backend
+        const response = await fetch('/api/teacher/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          // Erfolgreich → zum Dashboard
+          sessionStorage.setItem('teacher-authenticated', 'true');
+          window.location.href = '/teacher-image-quiz.html';
+        } else {
+          // Fehler → Fehlermeldung anzeigen
+          showError();
+        }
+        
+      } catch (error) {
+        console.error('Login error:', error);
+        showError();
+      }
+    });
+    
+    // Fehlermeldung anzeigen
+    function showError() {
+      errorMessage.classList.add('show');
+      passwordInput.value = '';
+      passwordInput.focus();
+      
+      // Nach 3 Sekunden ausblenden
+      setTimeout(() => {
+        errorMessage.classList.remove('show');
+      }, 3000);
+    }
+    
+    // Enter-Taste im Password-Feld
+    passwordInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        form.dispatchEvent(new Event('submit'));
+      }
+    });
+  </script>
+</body>
+</html>
