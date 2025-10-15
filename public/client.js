@@ -318,8 +318,9 @@ connectBtn.onclick = async () => {
     
     add('ai', '✅ Connected! Starting conversation with AI voice coach...');
     
+    // GEÄNDERT: Sende change_scenario statt client.init
     ws.send(JSON.stringify({
-      type: 'client.init',
+      type: 'change_scenario',
       scenario: scenario,
       level: level
     }));
@@ -355,7 +356,8 @@ connectBtn.onclick = async () => {
       const msg = JSON.parse(payload);
       console.log('📨 Received:', msg.type);
 
-      if (msg.type === 'server.response') {
+      // GEÄNDERT: Reagiere auf ai_response statt server.response
+      if (msg.type === 'ai_response') {
         const loader = document.getElementById('loading-indicator');
         if (loader) loader.remove();
         
@@ -375,6 +377,12 @@ connectBtn.onclick = async () => {
         const loader = document.getElementById('loading-indicator');
         if (loader) loader.remove();
         add('ai', `⚠️ Error: ${msg.message || 'Unknown error'}`);
+        return;
+      }
+      
+      // HINZUGEFÜGT: Scenario changed Bestätigung
+      if (msg.type === 'scenario_changed') {
+        add('ai', `✅ Scenario changed to: ${msg.scenario} (${msg.level})`);
         return;
       }
 
@@ -430,8 +438,9 @@ sendBtn.onclick = () => {
   chat.appendChild(loadingDiv);
   chat.scrollTop = chat.scrollHeight;
 
+  // GEÄNDERT: Sende user_text statt client.text
   ws.send(JSON.stringify({
-    type: 'client.text',
+    type: 'user_text',
     text: val
   }));
   
