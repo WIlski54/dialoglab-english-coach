@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bild-Quiz - Objekte benennen</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: system-ui, sans-serif;
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+    
+    .header {
+      background: white;
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    h1 {
+      color: #333;
+      font-size: 24px;
+    }
+    
+    .score-display {
+      text-align: right;
+    }
+    
+    .score-value {
+      font-size: 32px;
+      font-weight: bold;
+      color: #667eea;
+    }
+    
+    .score-label {
+      font-size: 14px;
+      color: #666;
+    }
+    
+    .main-card {
+      background: white;
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    
+    .waiting-state {
+      text-align: center;
+      padding: 60px 20px;
+    }
+    
+    .waiting-icon {
+      font-size: 80px;
+      margin-bottom: 20px;
+      animation: float 3s ease-in-out infinite;
+    }
+    
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-20px); }
+    }
+    
+    .waiting-text {
+      font-size: 24px;
+      color: #333;
+      margin-bottom: 12px;
+    }
+    
+    .waiting-subtitle {
+      color: #999;
+      font-size: 16px;
+    }
+    
+    .image-container {
+      display: none;
+      margin-bottom: 24px;
+    }
+    
+    .image-container.show {
+      display: block;
+    }
+    
+    .quiz-image {
+      width: 100%;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    }
+    
+    .controls {
+      display: none;
+    }
+    
+    .controls.show {
+      display: block;
+    }
+    
+    .mic-button {
+      width: 100%;
+      padding: 24px;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 20px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    }
+    
+    .mic-button:hover {
+      transform: scale(1.02);
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+    }
+    
+    .mic-button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    .mic-button.recording {
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      animation: pulse 1.5s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+    
+    .transcription {
+      margin: 16px 0;
+      padding: 16px;
+      background: #e0f2fe;
+      border-left: 4px solid #0ea5e9;
+      border-radius: 8px;
+      display: none;
+    }
+    
+    .transcription.show {
+      display: block;
+      animation: slideIn 0.3s ease-out;
+    }
+    
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .transcription-label {
+      font-size: 14px;
+      color: #0c4a6e;
+      margin-bottom: 8px;
+    }
+    
+    .transcription-text {
+      font-size: 20px;
+      font-weight: bold;
+      color: #0369a1;
+    }
+    
+    .feedback {
+      margin-top: 16px;
+      padding: 16px;
+      border-radius: 8px;
+      display: none;
+      animation: slideIn 0.3s ease-out;
+    }
+    
+    .feedback.show {
+      display: block;
+    }
+    
+    .feedback.correct {
+      background: #d1fae5;
+      border-left: 4px solid #10b981;
+      color: #065f46;
+    }
+    
+    .feedback.incorrect {
+      background: #fee2e2;
+      border-left: 4px solid #ef4444;
+      color: #991b1b;
+    }
+    
+    .feedback.already {
+      background: #fef3c7;
+      border-left: 4px solid #f59e0b;
+      color: #92400e;
+    }
+    
+    .found-objects {
+      background: #f8f9fa;
+      border-radius: 12px;
+      padding: 24px;
+      margin-top: 24px;
+    }
+    
+    .found-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 16px;
+    }
+    
+    .found-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 8px;
+    }
+    
+    .found-item {
+      padding: 12px;
+      background: white;
+      border-radius: 8px;
+      text-align: center;
+      font-weight: 500;
+      color: #10b981;
+      border: 2px solid #d1fae5;
+    }
+    
+    .progress-bar {
+      margin-top: 16px;
+      background: #e5e7eb;
+      height: 24px;
+      border-radius: 12px;
+      overflow: hidden;
+      position: relative;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+      transition: width 0.5s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 600;
+      font-size: 12px;
+    }
+    
+    .stats {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    
+    .stat {
+      flex: 1;
+      background: #f8f9fa;
+      padding: 16px;
+      border-radius: 8px;
+      text-align: center;
+    }
+    
+    .stat-value {
+      font-size: 32px;
+      font-weight: bold;
+      color: #667eea;
+    }
+    
+    .stat-label {
+      font-size: 14px;
+      color: #666;
+      margin-top: 4px;
+    }
+    
+    .connection-status {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-left: 12px;
+    }
+    
+    .status-connected {
+      background: #d1fae5;
+      color: #059669;
+    }
+    
+    .status-disconnected {
+      background: #fee2e2;
+      color: #dc2626;
+    }
+    
+    @media (max-width: 768px) {
+      .found-grid {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div>
+        <h1>🎨 Bild-Quiz</h1>
+        <span class="connection-status status-disconnected" id="connection-status">
+          🔴 Nicht verbunden
+        </span>
+      </div>
+      <div class="score-display">
+        <div class="score-value" id="score">0</div>
+        <div class="score-label">Punkte</div>
+      </div>
+    </div>
+    
+    <!-- Main Card -->
+    <div class="main-card">
+      <!-- Waiting State -->
+      <div class="waiting-state" id="waiting-state">
+        <div class="waiting-icon">🖼️</div>
+        <div class="waiting-text">Warte auf Bild...</div>
+        <div class="waiting-subtitle">Dein Lehrer wird gleich ein Bild senden</div>
+      </div>
+      
+      <!-- Image Container -->
+      <div class="image-container" id="image-container">
+        <img class="quiz-image" id="quiz-image" alt="Quiz Bild">
+      </div>
+      
+      <!-- Controls -->
+      <div class="controls" id="controls">
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-value" id="found-count">0</div>
+            <div class="stat-label">Gefunden</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value" id="total-count">0</div>
+            <div class="stat-label">Gesamt</div>
+          </div>
+        </div>
+        
+        <button class="mic-button" id="mic-button">
+          🎤 Objekt benennen
+        </button>
+        
+        <div class="transcription" id="transcription">
+          <div class="transcription-label">Du hast gesagt:</div>
+          <div class="transcription-text" id="transcription-text">apple</div>
+        </div>
+        
+        <div class="feedback" id="feedback">
+          Feedback erscheint hier
+        </div>
+        
+        <div class="progress-bar">
+          <div class="progress-fill" id="progress-fill">0%</div>
+        </div>
+        
+        <div class="found-objects">
+          <div class="found-title">✅ Gefundene Objekte:</div>
+          <div class="found-grid" id="found-grid">
+            <p style="color: #999; text-align: center; grid-column: 1/-1;">
+              Noch keine Objekte gefunden!
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // State
+    let ws;
+    let recognition;
+    let isRecording = false;
+    let studentId = 'student-' + Math.random().toString(36).substr(2, 9);
+    let score = 0;
+    let foundObjects = [];
+    let totalObjects = 0;
+    let quizActive = false;
+    
+    // DOM Elemente
+    const waitingState = document.getElementById('waiting-state');
+    const imageContainer = document.getElementById('image-container');
+    const controls = document.getElementById('controls');
+    const quizImage = document.getElementById('quiz-image');
+    const micButton = document.getElementById('mic-button');
+    const transcriptionDiv = document.getElementById('transcription');
+    const transcriptionText = document.getElementById('transcription-text');
+    const feedbackDiv = document.getElementById('feedback');
+    const scoreEl = document.getElementById('score');
+    const foundCountEl = document.getElementById('found-count');
+    const totalCountEl = document.getElementById('total-count');
+    const progressFill = document.getElementById('progress-fill');
+    const foundGrid = document.getElementById('found-grid');
+    const connectionStatus = document.getElementById('connection-status');
+    
+    // WebSocket Connection (KORRIGIERT!)
+    function connectWebSocket() {
+      // Prüfe ob wir eine gültige Host-Adresse haben
+      if (!window.location.host) {
+        console.warn('⚠️ Lokale Datei erkannt - WebSocket nicht verfügbar');
+        connectionStatus.textContent = '⚠️ Lokal (kein WebSocket)';
+        connectionStatus.className = 'connection-status status-disconnected';
+        return;
+      }
+      
+      try {
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.host}`;
+        
+        console.log('🔌 Verbinde mit WebSocket:', wsUrl);
+        
+        ws = new WebSocket(wsUrl);
+        
+        ws.onopen = () => {
+          console.log('✅ WebSocket verbunden');
+          connectionStatus.textContent = '🟢 Verbunden';
+          connectionStatus.className = 'connection-status status-connected';
+        };
+        
+        ws.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          console.log('📨 Nachricht:', data);
+          
+          if (data.type === 'image_quiz_start') {
+            startQuiz(data);
+          } else if (data.type === 'image_quiz_end') {
+            endQuiz(data);
+          }
+        };
+        
+        ws.onerror = (error) => {
+          console.error('❌ WebSocket error:', error);
+          connectionStatus.textContent = '🔴 Fehler';
+          connectionStatus.className = 'connection-status status-disconnected';
+        };
+        
+        ws.onclose = () => {
+          console.log('🔌 WebSocket getrennt');
+          connectionStatus.textContent = '🔴 Getrennt';
+          connectionStatus.className = 'connection-status status-disconnected';
+          
+          // Automatisch nach 3 Sekunden neu verbinden
+          setTimeout(connectWebSocket, 3000);
+        };
+        
+      } catch (error) {
+        console.error('❌ WebSocket Connection Error:', error);
+        connectionStatus.textContent = '🔴 Verbindungsfehler';
+        connectionStatus.className = 'connection-status status-disconnected';
+      }
+    }
+    
+    // Quiz starten
+    function startQuiz(data) {
+      quizActive = true;
+      totalObjects = data.totalObjects;
+      
+      // UI umschalten
+      waitingState.style.display = 'none';
+      imageContainer.classList.add('show');
+      controls.classList.add('show');
+      
+      // Bild laden
+      quizImage.src = data.imageUrl;
+      
+      // Stats aktualisieren
+      totalCountEl.textContent = totalObjects;
+      foundCountEl.textContent = 0;
+      updateProgress();
+      
+      // State zurücksetzen
+      foundObjects = [];
+      score = 0;
+      updateScore();
+      updateFoundObjects();
+      
+      // Mikrofon aktivieren
+      micButton.disabled = false;
+      
+      console.log('🎯 Quiz gestartet mit', totalObjects, 'Objekten!');
+    }
+    
+    // Quiz beenden
+    function endQuiz(data) {
+      quizActive = false;
+      
+      feedbackDiv.className = 'feedback show correct';
+      feedbackDiv.textContent = `🎉 Quiz beendet! Du hast ${foundObjects.length} von ${totalObjects} Objekten gefunden!`;
+      
+      micButton.disabled = true;
+      
+      console.log('🏁 Quiz beendet!');
+    }
+    
+    // Speech Recognition Setup
+    function setupSpeechRecognition() {
+      if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        micButton.disabled = true;
+        micButton.textContent = '❌ Mikrofon nicht verfügbar';
+        console.warn('⚠️ Speech Recognition nicht verfügbar');
+        return;
+      }
+      
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      
+      recognition.onstart = () => {
+        isRecording = true;
+        micButton.classList.add('recording');
+        micButton.textContent = '🎤 Aufnahme läuft...';
+        
+        // Feedback zurücksetzen
+        transcriptionDiv.classList.remove('show');
+        feedbackDiv.classList.remove('show');
+      };
+      
+      recognition.onend = () => {
+        isRecording = false;
+        micButton.classList.remove('recording');
+        micButton.textContent = '🎤 Objekt benennen';
+      };
+      
+      recognition.onerror = (event) => {
+        console.error('❌ Recognition error:', event.error);
+        isRecording = false;
+        micButton.classList.remove('recording');
+        micButton.textContent = '🎤 Objekt benennen';
+        
+        if (event.error === 'not-allowed') {
+          feedbackDiv.className = 'feedback show incorrect';
+          feedbackDiv.textContent = '❌ Mikrofon-Zugriff verweigert! Bitte erlaube den Zugriff.';
+        }
+      };
+      
+      recognition.onresult = async (event) => {
+        const transcript = event.results[0][0].transcript;
+        console.log('📝 Transkript:', transcript);
+        
+        // Transkription anzeigen
+        transcriptionText.textContent = transcript;
+        transcriptionDiv.classList.add('show');
+        
+        // Kurze Pause für visuelles Feedback
+        await new Promise(resolve => setTimeout(resolve, 800));
+        
+        // Antwort prüfen
+        await checkAnswer(transcript);
+      };
+      
+      console.log('✅ Speech Recognition bereit');
+    }
+    
+    // Mikrofon Button
+    micButton.addEventListener('click', () => {
+      if (!quizActive) {
+        feedbackDiv.className = 'feedback show incorrect';
+        feedbackDiv.textContent = '⚠️ Kein aktives Quiz!';
+        return;
+      }
+      
+      if (isRecording) {
+        recognition.stop();
+      } else {
+        recognition.start();
+      }
+    });
+    
+    // Antwort prüfen
+    async function checkAnswer(object) {
+      try {
+        const response = await fetch('/api/student/check-object', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            studentId: studentId,
+            object: object
+          })
+        });
+        
+        const data = await response.json();
+        
+        // Feedback anzeigen
+        feedbackDiv.classList.remove('correct', 'incorrect', 'already');
+        
+        if (data.correct) {
+          feedbackDiv.classList.add('show', 'correct');
+          feedbackDiv.textContent = `✅ ${data.message}`;
+          
+          // Objekt zur Liste hinzufügen
+          foundObjects.push(object.toLowerCase());
+          updateFoundObjects();
+          
+          // Punkte hinzufügen
+          score += data.points;
+          updateScore();
+          
+        } else if (data.alreadyGuessed) {
+          feedbackDiv.classList.add('show', 'already');
+          feedbackDiv.textContent = `⚠️ ${data.message}`;
+          
+        } else {
+          feedbackDiv.classList.add('show', 'incorrect');
+          feedbackDiv.textContent = `❌ ${data.message}`;
+        }
+        
+        // Stats aktualisieren
+        foundCountEl.textContent = data.totalFound;
+        updateProgress();
+        
+        console.log('🎯 Check:', data);
+        
+      } catch (error) {
+        console.error('❌ Check error:', error);
+        feedbackDiv.className = 'feedback show incorrect';
+        feedbackDiv.textContent = '❌ Verbindungsfehler zum Server!';
+      }
+    }
+    
+    // UI Updates
+    function updateScore() {
+      scoreEl.textContent = score;
+    }
+    
+    function updateProgress() {
+      const percentage = totalObjects > 0 
+        ? Math.round((foundObjects.length / totalObjects) * 100) 
+        : 0;
+      progressFill.style.width = percentage + '%';
+      progressFill.textContent = percentage + '%';
+    }
+    
+    function updateFoundObjects() {
+      if (foundObjects.length === 0) {
+        foundGrid.innerHTML = '<p style="color: #999; text-align: center; grid-column: 1/-1;">Noch keine Objekte gefunden!</p>';
+      } else {
+        foundGrid.innerHTML = '';
+        foundObjects.forEach(obj => {
+          const item = document.createElement('div');
+          item.className = 'found-item';
+          item.textContent = obj;
+          foundGrid.appendChild(item);
+        });
+      }
+    }
+    
+    // Init
+    console.log('🚀 Bild-Quiz wird initialisiert...');
+    connectWebSocket();
+    setupSpeechRecognition();
+  </script>
+</body>
+</html>
