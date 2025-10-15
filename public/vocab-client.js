@@ -1,304 +1,319 @@
 // ========================================
-// VOKABELTRAINER - CLIENT LOGIK
+// Vokabeltrainer Client - ERWEITERT
 // ========================================
 
-// DOM-Elemente
-const setupSection = document.getElementById('setup');
-const quizSection = document.getElementById('quiz');
-const resultsSection = document.getElementById('results');
-const feedbackSection = document.getElementById('feedback');
+let ws;
+let audioContext = null;
+let audioUnlocked = false;
 
-const scenarioSelect = document.getElementById('scenario');
-const difficultySelect = document.getElementById('difficulty');
-const startBtn = document.getElementById('start-btn');
-
-const currentQuestionEl = document.getElementById('current-question');
-const scoreEl = document.getElementById('score');
-const streakEl = document.getElementById('streak');
-const germanWordEl = document.getElementById('german-word');
-
-const recordBtn = document.getElementById('record-btn');
-const textAnswerInput = document.getElementById('text-answer');
-const submitBtn = document.getElementById('submit-btn');
-const nextBtn = document.getElementById('next-btn');
-
-// Quiz-State
+// Vokabeln
 let words = [];
 let currentIndex = 0;
+
+// Versuchszähler
+let currentAttempts = 0;
+const MAX_ATTEMPTS = 2;
+
+// Score & Stats
 let score = 0;
 let streak = 0;
 let bestStreak = 0;
 let correctCount = 0;
 let wrongCount = 0;
 
-// Audio-Aufnahme
-let mediaRecorder = null;
-let audioChunks = [];
+// Speech Recognition
+let recognition = null;
 let isRecording = false;
 
-// ========================================
-// START QUIZ
-// ========================================
-startBtn.addEventListener('click', async () => {
-  const scenario = scenarioSelect.value;
-  const difficulty = difficultySelect.value;
-  
-  startBtn.disabled = true;
-  startBtn.textContent = 'Lädt...';
-  
-  try {
-    // Vokabeln vom Server holen
-    const response = await fetch('/api/vocab/get-words', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scenario, difficulty })
-    });
-    
-    if (!response.ok) throw new Error('Failed to load vocabulary');
-    
-    const data = await response.json();
-    words = data.words;
-    
-    // Quiz starten
-    currentIndex = 0;
-    score = 0;
-    streak = 0;
-    bestStreak = 0;
-    correctCount = 0;
-    wrongCount = 0;
-    
-    setupSection.style.display = 'none';
-    quizSection.classList.add('active');
-    
-    showQuestion();
-    initAudioRecorder();
-    
-  } catch (error) {
-    console.error('Start error:', error);
-    alert('Fehler beim Laden der Vokabeln. Bitte versuche es erneut.');
-    startBtn.disabled = false;
-    startBtn.textContent = 'Start!';
-  }
-});
+// DOM Elemente
+const startBtn = document.getElementById('start-btn');
+const questionSection = document.getElementById('question-section');
+const feedbackSection = document.getElementById('feedback-section');
+const germanWordEl = document.getElementById('german-word');
+const textAnswerInput = document.getElementById('text-answer');
+const submitBtn = document.getElementById('submit-btn');
+const recordBtn = document.getElementById('record-btn');
+const scoreEl = document.getElementById('score');
+const streakEl = document.getElementById('streak');
+const statsSection = document.getElementById('stats-section');
+const hintBtn = document.getElementById('hint-btn');
+const hintText = document.getElementById('hint-text');
 
 // ========================================
-// FRAGE ANZEIGEN
+// Audio Context entsperren
 // ========================================
-function showQuestion() {
-  if (currentIndex >= words.length) {
-    showResults();
-    return;
+async function unlockAudio() {
+  if (audioUnlocked) return true;
+  
+  try {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // Test-Sound erzeugen
+    const buffer = audioContext.createBuffer(1, 1, 22050);
+    const source = audioContext.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioContext.destination);
+    source.start(0);
+    
+    audioUnlocked = true;
+    console.log('✅ Audio Context entsperrt!');
+    return true;
+  } catch (e) {
+    console.error('❌ Audio unlock failed:', e);
+    return false;
   }
-  
-  const word = words[currentIndex];
-  
-  currentQuestionEl.textContent = `${currentIndex + 1}/${words.length}`;
-  scoreEl.textContent = score;
-  streakEl.textContent = streak > 0 ? `${streak}🔥` : '0';
-  germanWordEl.textContent = word.de;
-  
-  textAnswerInput.value = '';
-  textAnswerInput.disabled = false;
-  submitBtn.disabled = false;
-  recordBtn.disabled = false;
-  
-  feedbackSection.classList.remove('show');
-  feedbackSection.classList.remove('correct');
-  feedbackSection.classList.remove('incorrect');
 }
 
 // ========================================
-// AUDIO-AUFNAHME INITIALISIEREN
+// Audio abspielen (Web Audio API)
 // ========================================
-async function initAudioRecorder() {
+async function playAudioFromBase64(base64Audio) {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ 
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        sampleRate: 44100
-      } 
-    });
-    
-    // MediaRecorder mit webm/opus (iOS & Android kompatibel)
-    const options = { mimeType: 'audio/webm;codecs=opus' };
-    
-    // Fallback für Safari
-    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-      options.mimeType = 'audio/mp4';
+    if (!audioContext) {
+      await unlockAudio();
     }
     
-    mediaRecorder = new MediaRecorder(stream, options);
+    // Base64 → ArrayBuffer
+    const binaryString = atob(base64Audio);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
     
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        audioChunks.push(event.data);
-      }
-    };
+    // ArrayBuffer dekodieren
+    const audioBuffer = await audioContext.decodeAudioData(bytes.buffer);
     
-    mediaRecorder.onstop = async () => {
-      const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
-      audioChunks = [];
-      
-      await checkPronunciation(audioBlob);
-    };
+    // AudioBufferSourceNode erstellen
+    const source = audioContext.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(audioContext.destination);
+    source.start(0);
     
-    console.log('✅ Audio recorder initialized');
+    console.log('🔊 Audio wird abgespielt');
+    
+    return new Promise((resolve) => {
+      source.onended = () => {
+        console.log('✅ Audio beendet');
+        resolve();
+      };
+    });
     
   } catch (error) {
-    console.error('Microphone error:', error);
-    recordBtn.disabled = true;
-    recordBtn.textContent = '🎤 Mikrofon nicht verfügbar';
+    console.error('❌ Audio playback error:', error);
+    throw error;
   }
 }
 
 // ========================================
-// AUFNAHME STARTEN/STOPPEN
+// TTS für einzelnes Wort abrufen
 // ========================================
-recordBtn.addEventListener('click', () => {
-  if (!mediaRecorder) {
-    alert('Mikrofon nicht verfügbar. Bitte gib die Antwort per Text ein.');
-    return;
-  }
-  
-  if (isRecording) {
-    // Aufnahme stoppen
-    mediaRecorder.stop();
-    isRecording = false;
-    recordBtn.classList.remove('recording');
-    recordBtn.textContent = '🎤 Aufnehmen & Sprechen';
-    recordBtn.disabled = true;
-  } else {
-    // Aufnahme starten
-    audioChunks = [];
-    mediaRecorder.start();
-    isRecording = true;
-    recordBtn.classList.add('recording');
-    recordBtn.textContent = '🔴 STOP (Aufnahme läuft)';
-    
-    // Nach 5 Sekunden automatisch stoppen
-    setTimeout(() => {
-      if (isRecording) {
-        recordBtn.click();
-      }
-    }, 5000);
-  }
-});
-
-// ========================================
-// AUSSPRACHE PRÜFEN (WHISPER API mit Base64)
-// ========================================
-async function checkPronunciation(audioBlob) {
-  const word = words[currentIndex];
-  
+async function speakWord(word) {
   try {
-    // Audio Blob zu Base64 konvertieren
-    const base64Audio = await blobToBase64(audioBlob);
-    
-    const response = await fetch('/api/vocab/check-pronunciation', {
+    const response = await fetch('/api/vocab/speak-word', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        audioBase64: base64Audio,
-        expectedWord: word.en
+      body: JSON.stringify({ word })
+    });
+    
+    if (!response.ok) throw new Error('TTS request failed');
+    
+    const data = await response.json();
+    await playAudioFromBase64(data.audio);
+    
+  } catch (error) {
+    console.error('❌ TTS Error:', error);
+  }
+}
+
+// ========================================
+// Tipp abrufen
+// ========================================
+async function getHint() {
+  try {
+    hintBtn.disabled = true;
+    hintBtn.textContent = '⏳ Tipp wird geladen...';
+    
+    const word = words[currentIndex];
+    
+    const response = await fetch('/api/vocab/get-hint', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        word: word.en, 
+        germanWord: word.de 
       })
     });
     
-    if (!response.ok) throw new Error('Pronunciation check failed');
+    if (!response.ok) throw new Error('Hint request failed');
     
-    const result = await response.json();
+    const data = await response.json();
     
-    showFeedback(result);
+    // Tipp anzeigen
+    hintText.textContent = `💡 ${data.hint}`;
+    hintText.style.display = 'block';
+    hintBtn.style.display = 'none';
     
   } catch (error) {
-    console.error('Pronunciation check error:', error);
-    alert('Fehler bei der Aussprache-Prüfung. Versuche es nochmal!');
-    recordBtn.disabled = false;
+    console.error('❌ Hint Error:', error);
+    hintBtn.textContent = '💡 Tipp';
+    hintBtn.disabled = false;
   }
 }
 
-// Blob zu Base64 konvertieren
-function blobToBase64(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64 = reader.result.split(',')[1]; // Remove data:audio/webm;base64,
-      resolve(base64);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
+// ========================================
+// Speech Recognition Setup
+// ========================================
+function setupSpeechRecognition() {
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    recordBtn.disabled = true;
+    recordBtn.title = 'Speech Recognition nicht verfügbar';
+    return;
+  }
+  
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new SpeechRecognition();
+  recognition.lang = 'en-US';
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  
+  recognition.onstart = () => {
+    isRecording = true;
+    recordBtn.classList.add('recording');
+    recordBtn.textContent = '⏸️ Aufnahme läuft...';
+  };
+  
+  recognition.onend = () => {
+    isRecording = false;
+    recordBtn.classList.remove('recording');
+    recordBtn.textContent = '🎤 Sprechen';
+  };
+  
+  recognition.onerror = (event) => {
+    console.error('❌ Recognition error:', event.error);
+    isRecording = false;
+    recordBtn.classList.remove('recording');
+    recordBtn.textContent = '🎤 Sprechen';
+  };
+  
+  recognition.onresult = async (event) => {
+    const transcript = event.results[0][0].transcript;
+    console.log('📝 Transkript:', transcript);
+    
+    // Antwort automatisch prüfen
+    await checkAnswer(transcript, 'voice');
+  };
 }
 
 // ========================================
-// TEXT-ANTWORT PRÜFEN
+// Antwort prüfen
 // ========================================
-submitBtn.addEventListener('click', () => {
-  const answer = textAnswerInput.value.trim().toLowerCase();
+async function checkAnswer(userAnswer, inputType = 'text') {
   const word = words[currentIndex];
+  currentAttempts++;
   
-  if (!answer) return;
+  // Buttons deaktivieren während Prüfung
+  submitBtn.disabled = true;
+  recordBtn.disabled = true;
+  textAnswerInput.disabled = true;
   
-  const correct = answer === word.en.toLowerCase();
-  
-  showFeedback({
-    correct: correct,
-    transcribed: answer,
-    expected: word.en,
-    pronunciationScore: null,
-    tips: null
-  });
-});
-
-textAnswerInput.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') {
-    submitBtn.click();
+  try {
+    // Bei Sprachantwort: Whisper-Analyse
+    if (inputType === 'voice') {
+      // Hier müssten wir eigentlich das Audio an Whisper senden
+      // Vereinfacht: direkte Textprüfung
+      await checkTextAnswer(userAnswer);
+    } else {
+      await checkTextAnswer(userAnswer);
+    }
+    
+  } catch (error) {
+    console.error('❌ Check error:', error);
+    submitBtn.disabled = false;
+    recordBtn.disabled = false;
+    textAnswerInput.disabled = false;
   }
-});
+}
 
 // ========================================
-// FEEDBACK ANZEIGEN
+// Text-Antwort prüfen
 // ========================================
-function showFeedback(result) {
+async function checkTextAnswer(userAnswer) {
+  const word = words[currentIndex];
+  const expected = word.en.toLowerCase().trim();
+  const given = userAnswer.toLowerCase().trim();
+  
+  const isCorrect = expected === given;
+  
+  if (isCorrect) {
+    // RICHTIG!
+    await showFeedback({
+      correct: true,
+      transcribed: userAnswer,
+      attempt: currentAttempts,
+      pronunciationScore: null,
+      expectedWord: word.en
+    });
+  } else {
+    // FALSCH!
+    if (currentAttempts >= MAX_ATTEMPTS) {
+      // Zweiter Versuch auch falsch → 0 Punkte
+      await showFeedback({
+        correct: false,
+        transcribed: userAnswer,
+        attempt: currentAttempts,
+        expectedWord: word.en,
+        needsTTS: true
+      });
+    } else {
+      // Erster Versuch falsch → Tipp geben
+      await showFeedback({
+        correct: false,
+        transcribed: userAnswer,
+        attempt: currentAttempts,
+        expectedWord: word.en,
+        needsTTS: false,
+        showHint: true
+      });
+    }
+  }
+}
+
+// ========================================
+// Feedback anzeigen
+// ========================================
+async function showFeedback(result) {
   feedbackSection.classList.add('show');
+  
+  let points = 0;
+  let feedbackHTML = '';
   
   if (result.correct) {
     // RICHTIG!
     feedbackSection.classList.add('correct');
     feedbackSection.classList.remove('incorrect');
     
-    score += 10;
+    // Punkte je nach Versuch
+    if (result.attempt === 1) {
+      points = 10;
+    } else {
+      points = 5;
+    }
+    
+    score += points;
     streak++;
     correctCount++;
     
     if (streak > bestStreak) bestStreak = streak;
     
-    let feedbackHTML = `
+    feedbackHTML = `
       <div class="feedback-icon">✅</div>
-      <div class="feedback-text">Richtig!</div>
-    `;
-    
-    if (result.pronunciationScore !== null) {
-      const stars = '⭐'.repeat(result.pronunciationScore);
-      feedbackHTML += `
-        <div class="feedback-details">
-          Du hast "<strong>${result.transcribed}</strong>" gesagt.<br>
-          Aussprache: ${stars}
-        </div>
-      `;
-    } else {
-      feedbackHTML += `
-        <div class="feedback-details">
-          Die Antwort "<strong>${result.transcribed}</strong>" ist korrekt!
-        </div>
-      `;
-    }
-    
-    if (result.tips && result.tips.length > 0) {
-      feedbackHTML += `<div class="feedback-details">${result.tips.join('<br>')}</div>`;
-    }
-    
-    feedbackSection.innerHTML = feedbackHTML + `
+      <div class="feedback-text">${result.attempt === 1 ? 'Perfekt!' : 'Jetzt hast du\'s!'}</div>
+      <div class="feedback-details">
+        ${result.attempt === 1 ? 
+          `Das war richtig! <strong>+${points} Punkte</strong>` : 
+          `Das war beim 2. Versuch richtig! <strong>+${points} Punkte</strong>`
+        }
+      </div>
       <button class="next-btn" id="next-btn">Nächstes Wort →</button>
     `;
     
@@ -307,39 +322,102 @@ function showFeedback(result) {
     feedbackSection.classList.add('incorrect');
     feedbackSection.classList.remove('correct');
     
-    streak = 0;
-    wrongCount++;
-    
-    const word = words[currentIndex];
-    
-    let feedbackHTML = `
-      <div class="feedback-icon">❌</div>
-      <div class="feedback-text">Nicht ganz richtig</div>
-      <div class="feedback-details">
-        Du hast "<strong>${result.transcribed}</strong>" gesagt.<br>
-        Richtig wäre: "<strong>${word.en}</strong>"
-      </div>
-    `;
-    
-    if (result.tips && result.tips.length > 0) {
-      feedbackHTML += `<div class="feedback-details">${result.tips.join('<br>')}</div>`;
+    if (result.attempt >= MAX_ATTEMPTS) {
+      // Zweiter Versuch auch falsch
+      streak = 0;
+      wrongCount++;
+      
+      feedbackHTML = `
+        <div class="feedback-icon">❌</div>
+        <div class="feedback-text">Das war leider nicht korrekt</div>
+        <div class="feedback-details">
+          Das richtige Wort ist: <strong>"${result.expectedWord}"</strong><br>
+          💪 Nicht aufgeben! Das nächste klappt bestimmt!
+        </div>
+      `;
+      
+      // TTS abspielen
+      if (result.needsTTS) {
+        feedbackHTML += `<div class="tts-playing">🔊 Hör dir die korrekte Aussprache an...</div>`;
+        feedbackSection.innerHTML = feedbackHTML;
+        
+        await speakWord(result.expectedWord);
+        
+        // Nach TTS: Next-Button anzeigen
+        feedbackHTML += `<button class="next-btn" id="next-btn">Nächstes Wort →</button>`;
+        feedbackSection.innerHTML = feedbackHTML;
+        document.getElementById('next-btn').addEventListener('click', nextWord);
+        
+      } else {
+        feedbackHTML += `<button class="next-btn" id="next-btn">Nächstes Wort →</button>`;
+        feedbackSection.innerHTML = feedbackHTML;
+        document.getElementById('next-btn').addEventListener('click', nextWord);
+      }
+      
+    } else {
+      // Erster Versuch falsch → Zweite Chance
+      feedbackHTML = `
+        <div class="feedback-icon">⚠️</div>
+        <div class="feedback-text">Nicht ganz! Versuch's nochmal!</div>
+        <div class="feedback-details">
+          Du hast noch <strong>eine Chance</strong>!
+        </div>
+      `;
+      
+      // Tipp abrufen und anzeigen
+      if (result.showHint) {
+        feedbackHTML += `<div class="hint-loading">💡 Tipp wird geladen...</div>`;
+        feedbackSection.innerHTML = feedbackHTML;
+        
+        try {
+          const word = words[currentIndex];
+          const response = await fetch('/api/vocab/get-hint', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              word: word.en, 
+              germanWord: word.de 
+            })
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            feedbackHTML = feedbackHTML.replace(
+              '<div class="hint-loading">💡 Tipp wird geladen...</div>',
+              `<div class="hint-display">💡 Tipp: ${data.hint}</div>`
+            );
+          }
+        } catch (error) {
+          console.error('❌ Hint error:', error);
+        }
+      }
+      
+      feedbackHTML += `<button class="next-btn" id="retry-btn">Nochmal versuchen</button>`;
+      feedbackSection.innerHTML = feedbackHTML;
+      
+      document.getElementById('retry-btn').addEventListener('click', () => {
+        // Feedback ausblenden, Inputs wieder aktivieren
+        feedbackSection.classList.remove('show');
+        feedbackSection.classList.remove('incorrect');
+        
+        submitBtn.disabled = false;
+        recordBtn.disabled = false;
+        textAnswerInput.disabled = false;
+        textAnswerInput.value = '';
+        textAnswerInput.focus();
+      });
+      
+      return; // Nicht weitermachen!
     }
-    
-    feedbackSection.innerHTML = feedbackHTML + `
-      <button class="next-btn" id="next-btn">Nächstes Wort →</button>
-    `;
   }
   
-  // Event-Listener für Next-Button
-  document.getElementById('next-btn').addEventListener('click', () => {
-    currentIndex++;
-    showQuestion();
-  });
-  
-  // Input deaktivieren
-  textAnswerInput.disabled = true;
-  submitBtn.disabled = true;
-  recordBtn.disabled = true;
+  // Falls nicht "retry", dann Next-Button Listener
+  if (result.correct || result.attempt >= MAX_ATTEMPTS) {
+    if (!result.needsTTS) {
+      feedbackSection.innerHTML = feedbackHTML;
+      document.getElementById('next-btn').addEventListener('click', nextWord);
+    }
+  }
   
   // Score updaten
   scoreEl.textContent = score;
@@ -347,27 +425,126 @@ function showFeedback(result) {
 }
 
 // ========================================
-// ERGEBNISSE ANZEIGEN
+// Nächstes Wort
 // ========================================
-function showResults() {
-  quizSection.classList.remove('active');
-  resultsSection.classList.add('show');
+function nextWord() {
+  currentIndex++;
+  currentAttempts = 0;
   
-  const totalWords = words.length;
-  const percentage = Math.round((correctCount / totalWords) * 100);
-  
-  document.getElementById('final-percentage').textContent = `${percentage}%`;
-  document.getElementById('total-correct').textContent = correctCount;
-  document.getElementById('total-wrong').textContent = wrongCount;
-  document.getElementById('best-streak').textContent = bestStreak > 0 ? `${bestStreak}🔥` : '0';
-  
-  // Mediastream stoppen
-  if (mediaRecorder && mediaRecorder.stream) {
-    mediaRecorder.stream.getTracks().forEach(track => track.stop());
+  if (currentIndex >= words.length) {
+    showFinalStats();
+  } else {
+    showQuestion();
   }
 }
 
 // ========================================
-// INITIAL STATE
+// Frage anzeigen
 // ========================================
-console.log('✅ Vocabulary Trainer loaded');
+function showQuestion() {
+  const word = words[currentIndex];
+  
+  // UI zurücksetzen
+  feedbackSection.classList.remove('show');
+  feedbackSection.classList.remove('correct');
+  feedbackSection.classList.remove('incorrect');
+  
+  questionSection.style.display = 'block';
+  
+  germanWordEl.textContent = word.de;
+  textAnswerInput.value = '';
+  textAnswerInput.disabled = false;
+  submitBtn.disabled = false;
+  recordBtn.disabled = false;
+  
+  hintText.style.display = 'none';
+  hintBtn.style.display = 'inline-block';
+  hintBtn.disabled = false;
+  hintBtn.textContent = '💡 Tipp';
+  
+  textAnswerInput.focus();
+}
+
+// ========================================
+// Finale Statistik
+// ========================================
+function showFinalStats() {
+  questionSection.style.display = 'none';
+  feedbackSection.classList.remove('show');
+  
+  statsSection.innerHTML = `
+    <h2>🎉 Quiz beendet!</h2>
+    <div class="stats-grid">
+      <div class="stat-item">
+        <div class="stat-value">${score}</div>
+        <div class="stat-label">Punkte</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value">${correctCount}</div>
+        <div class="stat-label">Richtig</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value">${wrongCount}</div>
+        <div class="stat-label">Falsch</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value">${bestStreak}🔥</div>
+        <div class="stat-label">Beste Serie</div>
+      </div>
+    </div>
+    <button class="next-btn" onclick="location.reload()">Nochmal spielen</button>
+  `;
+  
+  statsSection.style.display = 'block';
+}
+
+// ========================================
+// Start
+// ========================================
+startBtn.addEventListener('click', async () => {
+  // Audio entsperren
+  await unlockAudio();
+  
+  // Speech Recognition Setup
+  setupSpeechRecognition();
+  
+  // Vokabeln laden (Dummy für Demo)
+  words = [
+    { de: 'Apfel', en: 'apple' },
+    { de: 'Buch', en: 'book' },
+    { de: 'Katze', en: 'cat' },
+    { de: 'Hund', en: 'dog' },
+    { de: 'Haus', en: 'house' }
+  ];
+  
+  // UI umschalten
+  startBtn.style.display = 'none';
+  showQuestion();
+});
+
+// Submit Button
+submitBtn.addEventListener('click', () => {
+  const answer = textAnswerInput.value.trim();
+  if (answer) {
+    checkAnswer(answer, 'text');
+  }
+});
+
+// Enter-Taste im Input
+textAnswerInput.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    submitBtn.click();
+  }
+});
+
+// Record Button
+recordBtn.addEventListener('click', () => {
+  if (isRecording) {
+    recognition.stop();
+  } else {
+    recognition.start();
+  }
+});
+
+// Hint Button
+hintBtn.addEventListener('click', getHint);
