@@ -1,7 +1,8 @@
 {
-  "name": "dialoglab-realtime-en",
-  "version": "0.2.0",
-  "type": "module",
+  "name": "dialoglab-english-coach",
+  "version": "1.0.0",
+  "description": "English Learning Platform with AI - Dialog Lab, Vocabulary Trainer & Image Quiz",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "NODE_ENV=development node server.js"
@@ -11,7 +12,20 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "multer": "^1.4.5-lts.1",
+    "openai": "^4.20.0",
     "uuid": "^9.0.1",
     "ws": "^8.17.0"
-  }
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "english",
+    "learning",
+    "ai",
+    "gpt",
+    "education"
+  ],
+  "author": "Wilski54",
+  "license": "ISC"
 }
