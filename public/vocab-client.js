@@ -42,6 +42,8 @@ const hintBtn = document.getElementById('hint-btn');
 const hintText = document.getElementById('hint-text');
 const scenarioSelect = document.getElementById('scenario');
 const difficultySelect = document.getElementById('difficulty');
+const transcriptionDisplay = document.getElementById('transcription-display');
+const transcriptionText = document.getElementById('transcription-text');
 
 // ========================================
 // Audio Context entsperren
@@ -202,6 +204,13 @@ function setupSpeechRecognition() {
   recognition.onresult = async (event) => {
     const transcript = event.results[0][0].transcript;
     console.log('📝 Transkript:', transcript);
+    
+    // Transkription sofort anzeigen
+    transcriptionText.textContent = transcript;
+    transcriptionDisplay.style.display = 'block';
+    
+    // Kurze Pause für visuelles Feedback (800ms)
+    await new Promise(resolve => setTimeout(resolve, 800));
     
     // Antwort automatisch prüfen
     await checkAnswer(transcript, 'voice');
@@ -411,6 +420,10 @@ async function showFeedback(result) {
         feedbackSection.classList.remove('show');
         feedbackSection.classList.remove('incorrect');
         
+        // Transkription zurücksetzen
+        transcriptionDisplay.style.display = 'none';
+        transcriptionText.textContent = '';
+        
         submitBtn.disabled = false;
         recordBtn.disabled = false;
         textAnswerInput.disabled = false;
@@ -475,6 +488,10 @@ function showQuestion() {
   hintBtn.style.display = 'none';
   hintBtn.disabled = false;
   hintBtn.textContent = '💡 Tipp';
+  
+  // Transkription zurücksetzen
+  transcriptionDisplay.style.display = 'none';
+  transcriptionText.textContent = '';
   
   // Fortschritt aktualisieren
   if (currentQuestionEl) {
