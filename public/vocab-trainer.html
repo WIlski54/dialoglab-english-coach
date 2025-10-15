@@ -262,6 +262,30 @@
       font-weight: 600;
     }
     
+    .transcription-display {
+      background: #e0f2fe;
+      border-left: 4px solid #0ea5e9;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+      text-align: center;
+      animation: slideIn 0.3s ease-out;
+    }
+    
+    .transcription-label {
+      display: block;
+      font-size: 14px;
+      color: #0c4a6e;
+      margin-bottom: 8px;
+    }
+    
+    .transcription-text {
+      display: block;
+      font-size: 24px;
+      font-weight: bold;
+      color: #0369a1;
+    }
+    
     /* Feedback */
     .feedback {
       margin-top: 24px;
@@ -483,6 +507,12 @@
         <button class="record-btn" id="record-btn">
           🎤 Aufnehmen & Sprechen
         </button>
+        
+        <!-- Transkriptions-Anzeige -->
+        <div class="transcription-display" id="transcription-display" style="display: none;">
+          <span class="transcription-label">Du hast gesagt:</span>
+          <span class="transcription-text" id="transcription-text">apple</span>
+        </div>
         
         <div class="or-divider">oder</div>
         
