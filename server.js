@@ -10,13 +10,18 @@ const OpenAI = require('openai');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { randomUUID } = require('crypto');
 
 // ========================================
 // Express & Server Setup
 // ========================================
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+
+// WebSocket Servers für verschiedene Module
+const wssImageQuiz = new WebSocket.Server({ noServer: true }); // Bild-Quiz
+const wssStudent = new WebSocket.Server({ noServer: true });    // Dialog-Lab Student
+const wssTeacher = new WebSocket.Server({ noServer: true });    // Dialog-Lab Teacher
 
 // WICHTIG: Body Parser Limits
 app.use(express.json({ limit: '50mb' }));
@@ -95,6 +100,9 @@ const upload = multer({
 // Globale Variablen
 // ========================================
 
+// Dialog-Lab Sessions
+const sessions = new Map();
+
 // Bild-Quiz State
 let activeImageQuiz = {
   imageUrl: null,
@@ -109,23 +117,262 @@ const TEACHER_PASSWORD = process.env.TEACHER_PASSWORD || 'lehrer123';
 const activeSessions = new Set();
 
 // ========================================
-// WebSocket Connection Handler
+// WebSocket Upgrade Handler
 // ========================================
-wss.on('connection', (ws) => {
-  console.log('✅ Neue WebSocket Verbindung');
+server.on('upgrade', (request, socket, head) => {
+  const pathname = new URL(request.url, `http://${request.headers.host}`).pathname;
+  
+  console.log('🔌 WebSocket upgrade request:', pathname);
+  
+  if (pathname === '/ws' || pathname === '/student') {
+    wssStudent.handleUpgrade(request, socket, head, (ws) => {
+      wssStudent.emit('connection', ws, request);
+    });
+  } else if (pathname === '/teacher') {
+    wssTeacher.handleUpgrade(request, socket, head, (ws) => {
+      wssTeacher.emit('connection', ws, request);
+    });
+  } else if (pathname === '/image-quiz') {
+    wssImageQuiz.handleUpgrade(request, socket, head, (ws) => {
+      wssImageQuiz.emit('connection', ws, request);
+    });
+  } else {
+    socket.destroy();
+  }
+});
+
+// ========================================
+// Dialog-Lab WebSocket Handlers
+// ========================================
+
+// Student WebSocket (Dialog-Lab)
+wssStudent.on('connection', (client) => {
+  const sessionId = randomUUID();
+  
+  sessions.set(sessionId, {
+    scenario: 'shop',
+    level: 'A2',
+    startedAt: Date.now(),
+    messages: [],
+    lastText: '',
+    vocabHits: [],
+    errors: []
+  });
+  
+  console.log('✅ Dialog-Lab Student connected:', sessionId);
+  
+  // Send welcome message
+  (async () => {
+    try {
+      const session = sessions.get(sessionId);
+      const systemPrompt = {
+        role: 'system',
+        content: `You are a friendly English conversation coach for German students (grades 7-10). 
+Keep your responses very short (1-2 sentences maximum). 
+Be encouraging and correct mistakes gently. 
+The current scenario is "${session.scenario}" and the student's level is ${session.level}.
+Stay within this scenario and use vocabulary appropriate for ${session.level} level.`
+      };
+      
+      const initialMessage = {
+        role: 'user',
+        content: `Start a friendly conversation about the "${session.scenario}" scenario. Greet the student warmly.`
+      };
+      
+      session.messages.push(systemPrompt, initialMessage);
+      
+      const completion = await openai.chat.completions.create({
+        model: CHAT_MODEL,
+        messages: session.messages,
+        max_tokens: 150,
+        temperature: 0.7
+      });
+      
+      const aiResponse = completion.choices[0].message.content;
+      session.messages.push({ role: 'assistant', content: aiResponse });
+      
+      // Generate TTS
+      const mp3Response = await openai.audio.speech.create({
+        model: TTS_MODEL,
+        voice: TTS_VOICE,
+        input: aiResponse
+      });
+      
+      const buffer = Buffer.from(await mp3Response.arrayBuffer());
+      const audioBase64 = buffer.toString('base64');
+      
+      // Send response to client
+      client.send(JSON.stringify({
+        type: 'ai_response',
+        text: aiResponse,
+        audio: audioBase64
+      }));
+      
+      // Broadcast to teachers
+      broadcastToTeachers({
+        type: 'session_update',
+        sessionId: sessionId,
+        data: {
+          scenario: session.scenario,
+          level: session.level,
+          lastText: aiResponse
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Welcome message error:', error);
+      client.send(JSON.stringify({
+        type: 'error',
+        message: 'Failed to start conversation'
+      }));
+    }
+  })();
+  
+  // Handle incoming messages
+  client.on('message', async (message) => {
+    try {
+      const data = JSON.parse(message);
+      const session = sessions.get(sessionId);
+      
+      if (!session) {
+        client.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
+        return;
+      }
+      
+      console.log('📨 Student message:', data.type);
+      
+      if (data.type === 'user_text') {
+        // User sent text message
+        session.lastText = data.text;
+        session.messages.push({ role: 'user', content: data.text });
+        
+        // Get AI response
+        const completion = await openai.chat.completions.create({
+          model: CHAT_MODEL,
+          messages: session.messages,
+          max_tokens: 150,
+          temperature: 0.7
+        });
+        
+        const aiResponse = completion.choices[0].message.content;
+        session.messages.push({ role: 'assistant', content: aiResponse });
+        
+        // Generate TTS
+        const mp3Response = await openai.audio.speech.create({
+          model: TTS_MODEL,
+          voice: TTS_VOICE,
+          input: aiResponse
+        });
+        
+        const buffer = Buffer.from(await mp3Response.arrayBuffer());
+        const audioBase64 = buffer.toString('base64');
+        
+        // Send response
+        client.send(JSON.stringify({
+          type: 'ai_response',
+          text: aiResponse,
+          audio: audioBase64
+        }));
+        
+        // Broadcast to teachers
+        broadcastToTeachers({
+          type: 'session_update',
+          sessionId: sessionId,
+          data: {
+            scenario: session.scenario,
+            level: session.level,
+            lastText: data.text,
+            aiResponse: aiResponse
+          }
+        });
+        
+      } else if (data.type === 'change_scenario') {
+        session.scenario = data.scenario;
+        session.level = data.level;
+        session.messages = [];
+        
+        client.send(JSON.stringify({
+          type: 'scenario_changed',
+          scenario: data.scenario,
+          level: data.level
+        }));
+        
+      } else if (data.type === 'ping') {
+        client.send(JSON.stringify({ type: 'pong' }));
+      }
+      
+    } catch (error) {
+      console.error('❌ Message handler error:', error);
+      client.send(JSON.stringify({
+        type: 'error',
+        message: error.message
+      }));
+    }
+  });
+  
+  client.on('close', () => {
+    console.log('🔌 Dialog-Lab Student disconnected:', sessionId);
+    sessions.delete(sessionId);
+    
+    broadcastToTeachers({
+      type: 'session_ended',
+      sessionId: sessionId
+    });
+  });
+  
+  client.on('error', (error) => {
+    console.error('❌ WebSocket error:', error);
+  });
+});
+
+// Teacher WebSocket (Dialog-Lab Dashboard)
+wssTeacher.on('connection', (ws) => {
+  console.log('✅ Dialog-Lab Teacher connected');
+  
+  // Send current sessions snapshot
+  const snapshot = Array.from(sessions.entries()).map(([id, session]) => ({
+    id,
+    scenario: session.scenario,
+    level: session.level,
+    lastText: session.lastText || '',
+    startedAt: session.startedAt
+  }));
+  
+  ws.send(JSON.stringify({
+    type: 'sessions_snapshot',
+    sessions: snapshot
+  }));
+  
+  ws.on('close', () => {
+    console.log('🔌 Dialog-Lab Teacher disconnected');
+  });
+});
+
+function broadcastToTeachers(data) {
+  wssTeacher.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify(data));
+    }
+  });
+}
+
+// ========================================
+// Bild-Quiz WebSocket Handler
+// ========================================
+wssImageQuiz.on('connection', (ws) => {
+  console.log('✅ Bild-Quiz WebSocket connected');
   
   ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message);
-      console.log('📨 WebSocket Nachricht:', data.type);
+      console.log('📨 Bild-Quiz message:', data.type);
       
-      // Hier kannst du zusätzliche WebSocket-Messages verarbeiten
       if (data.type === 'ping') {
         ws.send(JSON.stringify({ type: 'pong' }));
       }
       
     } catch (error) {
-      console.error('❌ WebSocket message error:', error);
+      console.error('❌ Bild-Quiz WebSocket error:', error);
       ws.send(JSON.stringify({ 
         type: 'error', 
         message: error.message 
@@ -134,13 +381,22 @@ wss.on('connection', (ws) => {
   });
   
   ws.on('close', () => {
-    console.log('🔌 WebSocket Verbindung geschlossen');
+    console.log('🔌 Bild-Quiz WebSocket disconnected');
   });
   
   ws.on('error', (error) => {
-    console.error('❌ WebSocket error:', error);
+    console.error('❌ Bild-Quiz WebSocket error:', error);
   });
 });
+
+// Broadcast function for Image Quiz
+function broadcastImageQuizToClients(data) {
+  wssImageQuiz.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify(data));
+    }
+  });
+}
 
 // ========================================
 // Health Check (wichtig für Render)
@@ -409,15 +665,11 @@ app.post('/api/teacher/start-image-quiz', (req, res) => {
     console.log('🎯 Bild-Quiz gestartet mit', objects.length, 'Objekten');
     
     // Broadcast an alle verbundenen Schüler
-    wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({
-          type: 'image_quiz_start',
-          imageUrl: imageUrl,
-          totalObjects: objects.length,
-          message: 'Neues Bild-Quiz gestartet!'
-        }));
-      }
+    broadcastImageQuizToClients({
+      type: 'image_quiz_start',
+      imageUrl: imageUrl,
+      totalObjects: objects.length,
+      message: 'Neues Bild-Quiz gestartet!'
     });
     
     res.json({
@@ -517,14 +769,10 @@ app.post('/api/teacher/end-image-quiz', (req, res) => {
     });
     
     // Broadcast Quiz-Ende an alle Schüler
-    wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({
-          type: 'image_quiz_end',
-          message: 'Quiz beendet!',
-          stats: stats
-        }));
-      }
+    broadcastImageQuizToClients({
+      type: 'image_quiz_end',
+      message: 'Quiz beendet!',
+      stats: stats
     });
     
     console.log('🏁 Quiz beendet:', stats);
@@ -667,10 +915,11 @@ server.listen(PORT, () => {
   console.log(`🔑 OpenAI API Key: ${process.env.OPENAI_API_KEY ? '✅' : '❌ FEHLT!'}`);
   console.log('');
   console.log('✅ Module geladen:');
-  console.log('   - Dialog-Lab');
+  console.log('   - Dialog-Lab (WebSocket: /ws oder /student)');
   console.log('   - Vokabel-Trainer');
-  console.log('   - Bild-Quiz (GPT-5 Vision)');
+  console.log('   - Bild-Quiz (GPT-5 Vision, WebSocket: /image-quiz)');
   console.log('   - Lehrer-Login System');
+  console.log('   - Teacher Dashboard (WebSocket: /teacher)');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('');
 });
