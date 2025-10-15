@@ -27,17 +27,21 @@ let isRecording = false;
 
 // DOM Elemente
 const startBtn = document.getElementById('start-btn');
-const questionSection = document.getElementById('question-section');
-const feedbackSection = document.getElementById('feedback-section');
+const setupSection = document.getElementById('setup');
+const questionSection = document.getElementById('quiz');
+const feedbackSection = document.getElementById('feedback');
+const resultsSection = document.getElementById('results');
 const germanWordEl = document.getElementById('german-word');
 const textAnswerInput = document.getElementById('text-answer');
 const submitBtn = document.getElementById('submit-btn');
 const recordBtn = document.getElementById('record-btn');
 const scoreEl = document.getElementById('score');
 const streakEl = document.getElementById('streak');
-const statsSection = document.getElementById('stats-section');
+const currentQuestionEl = document.getElementById('current-question');
 const hintBtn = document.getElementById('hint-btn');
 const hintText = document.getElementById('hint-text');
+const scenarioSelect = document.getElementById('scenario');
+const difficultySelect = document.getElementById('difficulty');
 
 // ========================================
 // Audio Context entsperren
@@ -185,14 +189,14 @@ function setupSpeechRecognition() {
   recognition.onend = () => {
     isRecording = false;
     recordBtn.classList.remove('recording');
-    recordBtn.textContent = '🎤 Sprechen';
+    recordBtn.textContent = '🎤 Aufnehmen & Sprechen';
   };
   
   recognition.onerror = (event) => {
     console.error('❌ Recognition error:', event.error);
     isRecording = false;
     recordBtn.classList.remove('recording');
-    recordBtn.textContent = '🎤 Sprechen';
+    recordBtn.textContent = '🎤 Aufnehmen & Sprechen';
   };
   
   recognition.onresult = async (event) => {
@@ -364,6 +368,9 @@ async function showFeedback(result) {
         </div>
       `;
       
+      // Tipp-Button anzeigen
+      hintBtn.style.display = 'inline-block';
+      
       // Tipp abrufen und anzeigen
       if (result.showHint) {
         feedbackHTML += `<div class="hint-loading">💡 Tipp wird geladen...</div>`;
@@ -382,10 +389,14 @@ async function showFeedback(result) {
           
           if (response.ok) {
             const data = await response.json();
-            feedbackHTML = feedbackHTML.replace(
-              '<div class="hint-loading">💡 Tipp wird geladen...</div>',
-              `<div class="hint-display">💡 Tipp: ${data.hint}</div>`
-            );
+            
+            // Tipp in hint-text anzeigen
+            hintText.textContent = `💡 ${data.hint}`;
+            hintText.style.display = 'block';
+            
+            // Hint-loading entfernen
+            const hintLoading = feedbackSection.querySelector('.hint-loading');
+            if (hintLoading) hintLoading.remove();
           }
         } catch (error) {
           console.error('❌ Hint error:', error);
@@ -449,7 +460,10 @@ function showQuestion() {
   feedbackSection.classList.remove('correct');
   feedbackSection.classList.remove('incorrect');
   
+  questionSection.classList.add('active');
   questionSection.style.display = 'block';
+  resultsSection.classList.remove('show');
+  resultsSection.style.display = 'none';
   
   germanWordEl.textContent = word.de;
   textAnswerInput.value = '';
@@ -458,9 +472,14 @@ function showQuestion() {
   recordBtn.disabled = false;
   
   hintText.style.display = 'none';
-  hintBtn.style.display = 'inline-block';
+  hintBtn.style.display = 'none';
   hintBtn.disabled = false;
   hintBtn.textContent = '💡 Tipp';
+  
+  // Fortschritt aktualisieren
+  if (currentQuestionEl) {
+    currentQuestionEl.textContent = currentIndex + 1;
+  }
   
   textAnswerInput.focus();
 }
@@ -472,30 +491,17 @@ function showFinalStats() {
   questionSection.style.display = 'none';
   feedbackSection.classList.remove('show');
   
-  statsSection.innerHTML = `
-    <h2>🎉 Quiz beendet!</h2>
-    <div class="stats-grid">
-      <div class="stat-item">
-        <div class="stat-value">${score}</div>
-        <div class="stat-label">Punkte</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-value">${correctCount}</div>
-        <div class="stat-label">Richtig</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-value">${wrongCount}</div>
-        <div class="stat-label">Falsch</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-value">${bestStreak}🔥</div>
-        <div class="stat-label">Beste Serie</div>
-      </div>
-    </div>
-    <button class="next-btn" onclick="location.reload()">Nochmal spielen</button>
-  `;
+  const totalWords = words.length;
+  const percentage = Math.round((correctCount / totalWords) * 100);
   
-  statsSection.style.display = 'block';
+  // Ergebnis-Sektion füllen
+  document.getElementById('final-percentage').textContent = percentage + '%';
+  document.getElementById('total-correct').textContent = correctCount;
+  document.getElementById('total-wrong').textContent = wrongCount;
+  document.getElementById('best-streak').textContent = bestStreak + '🔥';
+  
+  resultsSection.classList.add('show');
+  resultsSection.style.display = 'block';
 }
 
 // ========================================
@@ -508,17 +514,113 @@ startBtn.addEventListener('click', async () => {
   // Speech Recognition Setup
   setupSpeechRecognition();
   
-  // Vokabeln laden (Dummy für Demo)
-  words = [
-    { de: 'Apfel', en: 'apple' },
-    { de: 'Buch', en: 'book' },
-    { de: 'Katze', en: 'cat' },
-    { de: 'Hund', en: 'dog' },
-    { de: 'Haus', en: 'house' }
-  ];
+  // Vokabeln basierend auf Auswahl laden
+  const scenario = scenarioSelect.value;
+  const difficulty = difficultySelect.value;
+  
+  // Dummy-Vokabeln (später vom Server laden)
+  const vocabSets = {
+    shop: [
+      { de: 'Einkaufswagen', en: 'shopping cart' },
+      { de: 'Kasse', en: 'checkout' },
+      { de: 'Preis', en: 'price' },
+      { de: 'Rabatt', en: 'discount' },
+      { de: 'Quittung', en: 'receipt' },
+      { de: 'Warenkorb', en: 'basket' },
+      { de: 'Öffnungszeiten', en: 'opening hours' },
+      { de: 'Umkleidekabine', en: 'fitting room' },
+      { de: 'Größe', en: 'size' },
+      { de: 'Rückgabe', en: 'return' },
+      { de: 'Garantie', en: 'warranty' },
+      { de: 'Tasche', en: 'bag' },
+      { de: 'Verkäufer', en: 'salesperson' },
+      { de: 'Kreditkarte', en: 'credit card' },
+      { de: 'Bargeld', en: 'cash' }
+    ],
+    airport: [
+      { de: 'Flugzeug', en: 'airplane' },
+      { de: 'Gepäck', en: 'luggage' },
+      { de: 'Boarding-Pass', en: 'boarding pass' },
+      { de: 'Sicherheitskontrolle', en: 'security check' },
+      { de: 'Tor', en: 'gate' },
+      { de: 'Abflug', en: 'departure' },
+      { de: 'Ankunft', en: 'arrival' },
+      { de: 'Handgepäck', en: 'carry-on' },
+      { de: 'Reisepass', en: 'passport' },
+      { de: 'Zoll', en: 'customs' },
+      { de: 'Verspätung', en: 'delay' },
+      { de: 'Flugbegleiter', en: 'flight attendant' },
+      { de: 'Notausgang', en: 'emergency exit' },
+      { de: 'Sitzplatz', en: 'seat' },
+      { de: 'Anschnallgurt', en: 'seatbelt' }
+    ],
+    school: [
+      { de: 'Lehrer', en: 'teacher' },
+      { de: 'Hausaufgaben', en: 'homework' },
+      { de: 'Klassenzimmer', en: 'classroom' },
+      { de: 'Prüfung', en: 'exam' },
+      { de: 'Bleistift', en: 'pencil' },
+      { de: 'Schulbuch', en: 'textbook' },
+      { de: 'Tafel', en: 'blackboard' },
+      { de: 'Pause', en: 'break' },
+      { de: 'Unterricht', en: 'lesson' },
+      { de: 'Note', en: 'grade' },
+      { de: 'Schüler', en: 'student' },
+      { de: 'Stundenplan', en: 'schedule' },
+      { de: 'Rucksack', en: 'backpack' },
+      { de: 'Radiergummi', en: 'eraser' },
+      { de: 'Lineal', en: 'ruler' }
+    ],
+    food: [
+      { de: 'Speisekarte', en: 'menu' },
+      { de: 'Rechnung', en: 'bill' },
+      { de: 'Kellner', en: 'waiter' },
+      { de: 'Tisch', en: 'table' },
+      { de: 'Trinkgeld', en: 'tip' },
+      { de: 'Vorspeise', en: 'appetizer' },
+      { de: 'Hauptgericht', en: 'main course' },
+      { de: 'Nachtisch', en: 'dessert' },
+      { de: 'Getränk', en: 'beverage' },
+      { de: 'Besteck', en: 'cutlery' },
+      { de: 'Gabel', en: 'fork' },
+      { de: 'Messer', en: 'knife' },
+      { de: 'Löffel', en: 'spoon' },
+      { de: 'Serviette', en: 'napkin' },
+      { de: 'Reservierung', en: 'reservation' }
+    ],
+    present: [
+      { de: 'Geschenk', en: 'present' },
+      { de: 'Geburtstag', en: 'birthday' },
+      { de: 'Überraschung', en: 'surprise' },
+      { de: 'Verpackung', en: 'wrapping' },
+      { de: 'Schleife', en: 'bow' },
+      { de: 'Karte', en: 'card' },
+      { de: 'Feier', en: 'celebration' },
+      { de: 'Kuchen', en: 'cake' },
+      { de: 'Kerze', en: 'candle' },
+      { de: 'Gast', en: 'guest' },
+      { de: 'Einladung', en: 'invitation' },
+      { de: 'Party', en: 'party' },
+      { de: 'Luftballon', en: 'balloon' },
+      { de: 'Dekoration', en: 'decoration' },
+      { de: 'Wunsch', en: 'wish' }
+    ]
+  };
+  
+  words = vocabSets[scenario] || vocabSets.shop;
+  
+  // Schwierigkeit anwenden
+  const wordCounts = { easy: 5, medium: 10, hard: 15 };
+  const targetCount = wordCounts[difficulty] || 10;
+  
+  // Wenn mehr Wörter gewünscht als vorhanden, wiederholen
+  while (words.length < targetCount) {
+    words = [...words, ...vocabSets[scenario]];
+  }
+  words = words.slice(0, targetCount);
   
   // UI umschalten
-  startBtn.style.display = 'none';
+  setupSection.style.display = 'none';
   showQuestion();
 });
 
