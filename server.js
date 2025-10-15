@@ -277,17 +277,77 @@ app.post('/api/vocab/get-words', (req, res) => {
 });
 
 // ========================================
-// API: Whisper Transkription + Bewertung
+// API: TTS für einzelnes Wort
+// ========================================
+app.post('/api/vocab/speak-word', async (req, res) => {
+  try {
+    const { word } = req.body;
+    
+    if (!word) {
+      return res.status(400).json({ error: 'Missing word' });
+    }
+    
+    console.log('🔊 Generating TTS for:', word);
+    
+    const audioBuffer = await generateSpeech(word);
+    const audioBase64 = audioBuffer.toString('base64');
+    
+    res.json({ audio: audioBase64 });
+    
+  } catch (error) {
+    console.error('❌ TTS generation error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ========================================
+// API: Tipp generieren mit ChatGPT
+// ========================================
+app.post('/api/vocab/get-hint', async (req, res) => {
+  try {
+    const { word, germanWord } = req.body;
+    
+    if (!word || !germanWord) {
+      return res.status(400).json({ error: 'Missing word or germanWord' });
+    }
+    
+    console.log('💡 Generating hint for:', word);
+    
+    const prompt = [
+      {
+        role: 'system',
+        content: 'You are a helpful English teacher. Generate a SHORT hint (max 10 words) in German to help a student guess the English word. The hint should be helpful but not give away the entire answer.'
+      },
+      {
+        role: 'user',
+        content: `Das deutsche Wort ist "${germanWord}". Das englische Wort ist "${word}". Gib einen kurzen Tipp auf Deutsch.`
+      }
+    ];
+    
+    const hint = await getChatResponse(prompt);
+    
+    res.json({ hint: hint.trim() });
+    
+  } catch (error) {
+    console.error('❌ Hint generation error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ========================================
+// API: Whisper Transkription + Bewertung (ERWEITERT)
 // ========================================
 app.post('/api/vocab/check-pronunciation', async (req, res) => {
   try {
-    const { audioBase64, expectedWord } = req.body;
+    const { audioBase64, expectedWord, attempt } = req.body;
     
     if (!audioBase64 || !expectedWord) {
       return res.status(400).json({ error: 'Missing audio or expectedWord' });
     }
     
-    console.log('🎤 Checking pronunciation for:', expectedWord);
+    const attemptNum = attempt || 1;
+    
+    console.log(`🎤 Checking pronunciation for: ${expectedWord} (Attempt ${attemptNum})`);
     
     // Base64 → Buffer → Blob
     const audioBuffer = Buffer.from(audioBase64, 'base64');
@@ -319,23 +379,67 @@ app.post('/api/vocab/check-pronunciation', async (req, res) => {
     console.log('📝 Transcribed:', transcribed);
     console.log('✓ Expected:', expected);
     
-    // Vergleichen
+    // Vergleichen - toleranter Match
     const isCorrect = transcribed === expected || 
                       transcribed.includes(expected) ||
                       expected.includes(transcribed);
     
-    // Confidence Score berechnen
+    // Confidence Score berechnen (1-5 Sterne)
     const avgConfidence = whisperData.segments?.reduce((sum, seg) => sum + (seg.avg_logprob || 0), 0) / (whisperData.segments?.length || 1);
     const pronunciationScore = Math.max(0, Math.min(5, Math.round((1 + avgConfidence / 0.5) * 5)));
     
     // Typische Fehler erkennen
     const commonErrors = detectCommonErrors(expected, transcribed);
     
+    // Punkteberechnung
+    let points = 0;
+    let needsTTS = false;
+    let feedback = '';
+    
+    if (!isCorrect) {
+      // FALSCHES WORT
+      points = 0;
+      needsTTS = attemptNum >= 2; // TTS beim 2. Versuch
+      
+      if (attemptNum === 1) {
+        feedback = 'incorrect_first';
+      } else {
+        feedback = 'incorrect_final';
+      }
+      
+    } else {
+      // RICHTIGES WORT - Punkte basierend auf Aussprache
+      if (attemptNum === 1) {
+        // Erster Versuch
+        if (pronunciationScore >= 4) {
+          points = pronunciationScore === 5 ? 10 : 9;
+          needsTTS = false;
+          feedback = 'perfect';
+        } else if (pronunciationScore === 3) {
+          points = 7;
+          needsTTS = true;
+          feedback = 'good_needs_improvement';
+        } else {
+          points = 4;
+          needsTTS = true;
+          feedback = 'correct_poor_pronunciation';
+        }
+      } else {
+        // Zweiter Versuch
+        points = 5;
+        needsTTS = pronunciationScore < 4;
+        feedback = 'correct_second_attempt';
+      }
+    }
+    
     res.json({
       correct: isCorrect,
       transcribed: transcribed,
       expected: expected,
       pronunciationScore: pronunciationScore,
+      points: points,
+      needsTTS: needsTTS,
+      feedback: feedback,
       tips: commonErrors.length > 0 ? commonErrors : null
     });
     
