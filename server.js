@@ -18,8 +18,26 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
+// WICHTIG: Body Parser Limits
 app.use(express.json({ limit: '50mb' }));
-app.use(express.static('.'));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// CORS Middleware für Deployment
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  next();
+});
+
+// Static Files ZUERST (wichtig für Render!)
+app.use(express.static('public'));
+app.use('/uploads', express.static('uploads'));
+
+// Fallback für SPA-routing (index.html für alle nicht-API routes)
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 const PORT = process.env.PORT || 3000;
 
@@ -33,16 +51,22 @@ const openai = new OpenAI({
 const CHAT_MODEL = process.env.CHAT_MODEL || 'gpt-4o-mini';
 const TTS_MODEL = process.env.TTS_MODEL || 'tts-1';
 const TTS_VOICE = process.env.TTS_VOICE || 'alloy';
+const VISION_MODEL = process.env.VISION_MODEL || 'gpt-5'; // GPT-5 mit Vision!
+
+// ========================================
+// Uploads Ordner sicherstellen
+// ========================================
+const uploadDir = './uploads/images';
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+  console.log('📁 Upload-Ordner erstellt:', uploadDir);
+}
 
 // ========================================
 // Multer Setup für Bild-Upload
 // ========================================
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadDir = './uploads/images';
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
@@ -93,17 +117,39 @@ wss.on('connection', (ws) => {
   ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message);
-      console.log('📨 Nachricht empfangen:', data.type);
+      console.log('📨 WebSocket Nachricht:', data.type);
       
-      // Verarbeite verschiedene Message-Types hier wenn nötig
+      // Hier kannst du zusätzliche WebSocket-Messages verarbeiten
+      if (data.type === 'ping') {
+        ws.send(JSON.stringify({ type: 'pong' }));
+      }
       
     } catch (error) {
       console.error('❌ WebSocket message error:', error);
+      ws.send(JSON.stringify({ 
+        type: 'error', 
+        message: error.message 
+      }));
     }
   });
   
   ws.on('close', () => {
     console.log('🔌 WebSocket Verbindung geschlossen');
+  });
+  
+  ws.on('error', (error) => {
+    console.error('❌ WebSocket error:', error);
+  });
+});
+
+// ========================================
+// Health Check (wichtig für Render)
+// ========================================
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
   });
 });
 
@@ -115,6 +161,10 @@ wss.on('connection', (ws) => {
 app.post('/api/chat', async (req, res) => {
   try {
     const { messages } = req.body;
+    
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: 'Invalid messages format' });
+    }
     
     const completion = await openai.chat.completions.create({
       model: CHAT_MODEL,
@@ -135,6 +185,10 @@ app.post('/api/chat', async (req, res) => {
 app.post('/api/tts', async (req, res) => {
   try {
     const { text } = req.body;
+    
+    if (!text) {
+      return res.status(400).json({ error: 'Text is required' });
+    }
     
     console.log('🔊 TTS für:', text.substring(0, 50));
     
@@ -250,7 +304,7 @@ app.post('/api/teacher/upload-image', upload.single('image'), async (req, res) =
   }
 });
 
-// Bild analysieren mit GPT-5 Vision
+// Bild analysieren mit GPT-4 Vision
 app.post('/api/teacher/analyze-image', async (req, res) => {
   try {
     const { imageUrl } = req.body;
@@ -266,9 +320,11 @@ app.post('/api/teacher/analyze-image', async (req, res) => {
       ? imageUrl 
       : `${req.protocol}://${req.get('host')}${imageUrl}`;
     
+    console.log('🌐 Full URL:', fullImageUrl);
+    
     // GPT-5 Vision API Call
     const response = await openai.chat.completions.create({
-      model: 'gpt-5',
+      model: VISION_MODEL,
       messages: [
         {
           role: 'user',
@@ -293,7 +349,7 @@ app.post('/api/teacher/analyze-image', async (req, res) => {
     });
     
     const content = response.choices[0].message.content;
-    console.log('📝 GPT-5 Vision Antwort:', content);
+    console.log('🔍 GPT-5 Vision Antwort:', content);
     
     // JSON extrahieren
     let detectedObjects = [];
@@ -325,7 +381,10 @@ app.post('/api/teacher/analyze-image', async (req, res) => {
     
   } catch (error) {
     console.error('❌ Analyse error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
@@ -386,6 +445,10 @@ app.post('/api/student/check-object', (req, res) => {
         error: 'Kein aktives Quiz',
         correct: false 
       });
+    }
+    
+    if (!studentId || !object) {
+      return res.status(400).json({ error: 'StudentId und object erforderlich' });
     }
     
     const normalizedObject = object.toLowerCase().trim();
@@ -579,23 +642,35 @@ app.post('/api/teacher/logout', (req, res) => {
 });
 
 // ========================================
-// Statische Dateien
+// Error Handler (muss am Ende sein!)
 // ========================================
-app.use('/uploads', express.static('uploads'));
+app.use((err, req, res, next) => {
+  console.error('❌ Global error:', err);
+  res.status(500).json({ 
+    error: 'Internal server error',
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+  });
+});
 
 // ========================================
 // Server starten
 // ========================================
 server.listen(PORT, () => {
+  console.log('');
   console.log('🚀 DialogLab Server gestartet!');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log(`📍 Port: ${PORT}`);
   console.log(`💬 Chat Model: ${CHAT_MODEL}`);
   console.log(`🔊 TTS Model: ${TTS_MODEL}`);
-  console.log(`🔐 Lehrer-Passwort gesetzt: ${process.env.TEACHER_PASSWORD ? '✅' : '⚠️ Standard'}`);
+  console.log(`👁️  Vision Model: ${VISION_MODEL}`);
+  console.log(`🔐 Lehrer-Passwort gesetzt: ${process.env.TEACHER_PASSWORD ? '✅' : '⚠️  Standard (lehrer123)'}`);
+  console.log(`🔑 OpenAI API Key: ${process.env.OPENAI_API_KEY ? '✅' : '❌ FEHLT!'}`);
   console.log('');
   console.log('✅ Module geladen:');
   console.log('   - Dialog-Lab');
   console.log('   - Vokabel-Trainer');
   console.log('   - Bild-Quiz (GPT-5 Vision)');
   console.log('   - Lehrer-Login System');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('');
 });
