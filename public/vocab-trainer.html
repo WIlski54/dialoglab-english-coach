@@ -237,6 +237,31 @@
       cursor: pointer;
     }
     
+    .hint-btn {
+      background: #f59e0b;
+      color: white;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 12px;
+    }
+    
+    .hint-btn:hover {
+      background: #d97706;
+    }
+    
+    .hint-display {
+      background: #fef3c7;
+      border-left: 4px solid #f59e0b;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-top: 12px;
+      color: #92400e;
+      font-weight: 600;
+    }
+    
     /* Feedback */
     .feedback {
       margin-top: 24px;
@@ -293,6 +318,23 @@
       font-weight: 600;
       cursor: pointer;
       margin-top: 16px;
+    }
+    
+    .hint-loading {
+      background: #fef3c7;
+      padding: 12px;
+      border-radius: 8px;
+      color: #92400e;
+      margin-top: 12px;
+    }
+    
+    .tts-playing {
+      background: #dbeafe;
+      padding: 12px;
+      border-radius: 8px;
+      color: #1e40af;
+      margin-top: 12px;
+      font-weight: 600;
     }
     
     /* Ergebnis-Bildschirm */
@@ -448,6 +490,10 @@
           <input type="text" id="text-answer" placeholder="Tippe die Antwort...">
           <button class="submit-btn" id="submit-btn">✓</button>
         </div>
+        
+        <!-- Tipp-Button -->
+        <button class="hint-btn" id="hint-btn" style="display: none;">💡 Tipp</button>
+        <div class="hint-display" id="hint-text" style="display: none;"></div>
       </div>
       
       <!-- Feedback -->
