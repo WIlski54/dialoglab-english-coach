@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lehrer Dashboard - Bild-Quiz</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: system-ui, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .header {
+      background: white;
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    }
+    
+    h1 {
+      color: #333;
+      margin-bottom: 8px;
+    }
+    
+    .subtitle {
+      color: #666;
+      font-size: 14px;
+    }
+    
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    }
+    
+    .card h2 {
+      color: #333;
+      margin-bottom: 16px;
+      font-size: 20px;
+    }
+    
+    .upload-zone {
+      border: 3px dashed #ddd;
+      border-radius: 12px;
+      padding: 40px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      background: #fafafa;
+    }
+    
+    .upload-zone:hover {
+      border-color: #667eea;
+      background: #f0f4ff;
+    }
+    
+    .upload-zone.dragover {
+      border-color: #667eea;
+      background: #e0e7ff;
+    }
+    
+    .upload-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+    
+    input[type="file"] {
+      display: none;
+    }
+    
+    .image-preview {
+      margin-top: 20px;
+      display: none;
+    }
+    
+    .image-preview.show {
+      display: block;
+    }
+    
+    .image-preview img {
+      max-width: 100%;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    button {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 16px;
+      transition: all 0.3s;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      width: 100%;
+      margin-top: 16px;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+    
+    .btn-primary:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    .btn-success {
+      background: #10b981;
+      color: white;
+      width: 100%;
+      margin-top: 16px;
+    }
+    
+    .btn-success:hover {
+      background: #059669;
+    }
+    
+    .btn-danger {
+      background: #ef4444;
+      color: white;
+      width: 100%;
+      margin-top: 16px;
+    }
+    
+    .btn-danger:hover {
+      background: #dc2626;
+    }
+    
+    .objects-list {
+      margin-top: 16px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    
+    .object-item {
+      padding: 12px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .object-number {
+      background: #667eea;
+      color: white;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 14px;
+    }
+    
+    .object-name {
+      flex: 1;
+      font-weight: 500;
+      color: #333;
+    }
+    
+    .status-badge {
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    
+    .status-inactive {
+      background: #fee2e2;
+      color: #dc2626;
+    }
+    
+    .status-active {
+      background: #d1fae5;
+      color: #059669;
+      animation: pulse-badge 2s infinite;
+    }
+    
+    @keyframes pulse-badge {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 16px;
+    }
+    
+    .stat-card {
+      background: #f8f9fa;
+      padding: 16px;
+      border-radius: 8px;
+      text-align: center;
+    }
+    
+    .stat-value {
+      font-size: 32px;
+      font-weight: bold;
+      color: #667eea;
+    }
+    
+    .stat-label {
+      font-size: 14px;
+      color: #666;
+      margin-top: 4px;
+    }
+    
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 20px;
+      color: #666;
+    }
+    
+    .loading.show {
+      display: block;
+    }
+    
+    .spinner {
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #667eea;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 12px;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .alert {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-top: 16px;
+      display: none;
+    }
+    
+    .alert.show {
+      display: block;
+    }
+    
+    .alert-success {
+      background: #d1fae5;
+      color: #065f46;
+      border-left: 4px solid #10b981;
+    }
+    
+    .alert-error {
+      background: #fee2e2;
+      color: #991b1b;
+      border-left: 4px solid #ef4444;
+    }
+    
+    @media (max-width: 768px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>🎨 Lehrer Dashboard - Bild-Quiz</h1>
+      <p class="subtitle">Lade ein Bild hoch, analysiere es und starte das Quiz für deine Schüler</p>
+    </div>
+    
+    <div class="grid">
+      <!-- Linke Spalte: Upload & Analyse -->
+      <div>
+        <!-- Upload Card -->
+        <div class="card">
+          <h2>1️⃣ Bild hochladen</h2>
+          
+          <div class="upload-zone" id="upload-zone">
+            <div class="upload-icon">📸</div>
+            <p><strong>Klicke hier</strong> oder ziehe ein Bild hierher</p>
+            <p style="color: #999; font-size: 14px; margin-top: 8px;">JPG, PNG, GIF (max. 10MB)</p>
+          </div>
+          
+          <input type="file" id="file-input" accept="image/*">
+          
+          <div class="image-preview" id="image-preview">
+            <img id="preview-img" alt="Vorschau">
+          </div>
+          
+          <div class="alert alert-success" id="upload-success">
+            ✅ Bild erfolgreich hochgeladen!
+          </div>
+          
+          <div class="alert alert-error" id="upload-error">
+            ❌ Fehler beim Hochladen!
+          </div>
+        </div>
+        
+        <!-- Analyse Card -->
+        <div class="card" style="margin-top: 20px;">
+          <h2>2️⃣ Bild analysieren</h2>
+          <p style="color: #666; margin-bottom: 16px;">GPT-5 Vision erkennt automatisch alle Objekte im Bild</p>
+          
+          <button class="btn-primary" id="analyze-btn" disabled>
+            🔍 Mit GPT-5 Vision analysieren
+          </button>
+          
+          <div class="loading" id="analyzing-loading">
+            <div class="spinner"></div>
+            <p>GPT-5 analysiert das Bild...</p>
+          </div>
+          
+          <div class="alert alert-success" id="analyze-success">
+            ✅ <span id="object-count">0</span> Objekte erkannt!
+          </div>
+          
+          <div class="alert alert-error" id="analyze-error">
+            ❌ Fehler bei der Analyse!
+          </div>
+        </div>
+      </div>
+      
+      <!-- Rechte Spalte: Objekte & Quiz-Control -->
+      <div>
+        <!-- Objekte Card -->
+        <div class="card">
+          <h2>📋 Erkannte Objekte</h2>
+          
+          <div id="objects-container">
+            <p style="color: #999; text-align: center; padding: 40px 0;">
+              Noch keine Objekte erkannt.<br>Lade ein Bild hoch und analysiere es!
+            </p>
+          </div>
+          
+          <div class="objects-list" id="objects-list" style="display: none;">
+            <!-- Wird dynamisch gefüllt -->
+          </div>
+        </div>
+        
+        <!-- Quiz Control Card -->
+        <div class="card" style="margin-top: 20px;">
+          <h2>3️⃣ Quiz starten</h2>
+          
+          <div class="status-badge status-inactive" id="quiz-status">
+            ⭕ Inaktiv
+          </div>
+          
+          <button class="btn-success" id="start-quiz-btn" disabled>
+            🚀 Quiz an Schüler übertragen
+          </button>
+          
+          <button class="btn-danger" id="end-quiz-btn" style="display: none;">
+            🛑 Quiz beenden
+          </button>
+          
+          <div class="stats-grid" id="quiz-stats" style="display: none;">
+            <div class="stat-card">
+              <div class="stat-value" id="stat-objects">0</div>
+              <div class="stat-label">Objekte</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="stat-students">0</div>
+              <div class="stat-label">Schüler</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="stat-time">0:00</div>
+              <div class="stat-label">Zeit</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // SESSION-CHECK: Nur für authentifizierte Lehrer
+    (function checkAuth() {
+      const isAuthenticated = sessionStorage.getItem('teacher-authenticated');
+      
+      if (!isAuthenticated) {
+        window.location.href = '/teacher-login.html';
+        return;
+      }
+      
+      console.log('✅ Lehrer authentifiziert');
+    })();
+    
+    // State
+    let uploadedImageUrl = null;
+    let detectedObjects = [];
+    let quizStartTime = null;
+    let timerInterval = null;
+    
+    // DOM Elemente
+    const uploadZone = document.getElementById('upload-zone');
+    const fileInput = document.getElementById('file-input');
+    const imagePreview = document.getElementById('image-preview');
+    const previewImg = document.getElementById('preview-img');
+    const analyzeBtn = document.getElementById('analyze-btn');
+    const startQuizBtn = document.getElementById('start-quiz-btn');
+    const endQuizBtn = document.getElementById('end-quiz-btn');
+    const objectsList = document.getElementById('objects-list');
+    const objectsContainer = document.getElementById('objects-container');
+    const quizStatus = document.getElementById('quiz-status');
+    const quizStats = document.getElementById('quiz-stats');
+    
+    // Upload Zone Click
+    uploadZone.addEventListener('click', () => fileInput.click());
+    
+    // Drag & Drop
+    uploadZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadZone.classList.add('dragover');
+    });
+    
+    uploadZone.addEventListener('dragleave', () => {
+      uploadZone.classList.remove('dragover');
+    });
+    
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('dragover');
+      
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        handleFileUpload(files[0]);
+      }
+    });
+    
+    // File Input Change
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        handleFileUpload(e.target.files[0]);
+      }
+    });
+    
+    // Bild hochladen
+    async function handleFileUpload(file) {
+      const formData = new FormData();
+      formData.append('image', file);
+      
+      try {
+        showAlert('upload-success', false);
+        showAlert('upload-error', false);
+        
+        const response = await fetch('/api/teacher/upload-image', {
+          method: 'POST',
+          body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          uploadedImageUrl = data.imageUrl;
+          
+          // Vorschau anzeigen
+          previewImg.src = uploadedImageUrl;
+          imagePreview.classList.add('show');
+          
+          // Analyse-Button aktivieren
+          analyzeBtn.disabled = false;
+          
+          showAlert('upload-success', true);
+          
+          console.log('✅ Bild hochgeladen:', uploadedImageUrl);
+        } else {
+          throw new Error(data.error || 'Upload fehlgeschlagen');
+        }
+        
+      } catch (error) {
+        console.error('❌ Upload error:', error);
+        showAlert('upload-error', true);
+      }
+    }
+    
+    // Bild analysieren
+    analyzeBtn.addEventListener('click', async () => {
+      if (!uploadedImageUrl) return;
+      
+      try {
+        showAlert('analyze-success', false);
+        showAlert('analyze-error', false);
+        showLoading('analyzing-loading', true);
+        analyzeBtn.disabled = true;
+        
+        const response = await fetch('/api/teacher/analyze-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageUrl: uploadedImageUrl })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          detectedObjects = data.objects;
+          
+          // Objekte anzeigen
+          displayObjects(detectedObjects);
+          
+          // Success-Meldung
+          document.getElementById('object-count').textContent = data.count;
+          showAlert('analyze-success', true);
+          
+          // Quiz-Start Button aktivieren
+          startQuizBtn.disabled = false;
+          
+          console.log('✅ Objekte erkannt:', detectedObjects);
+        } else {
+          throw new Error(data.error || 'Analyse fehlgeschlagen');
+        }
+        
+      } catch (error) {
+        console.error('❌ Analyse error:', error);
+        showAlert('analyze-error', true);
+        analyzeBtn.disabled = false;
+      } finally {
+        showLoading('analyzing-loading', false);
+      }
+    });
+    
+    // Objekte anzeigen
+    function displayObjects(objects) {
+      objectsContainer.style.display = 'none';
+      objectsList.style.display = 'block';
+      objectsList.innerHTML = '';
+      
+      objects.forEach((obj, index) => {
+        const item = document.createElement('div');
+        item.className = 'object-item';
+        item.innerHTML = `
+          <div class="object-number">${index + 1}</div>
+          <div class="object-name">${obj}</div>
+        `;
+        objectsList.appendChild(item);
+      });
+    }
+    
+    // Quiz starten
+    startQuizBtn.addEventListener('click', async () => {
+      if (!uploadedImageUrl || detectedObjects.length === 0) return;
+      
+      try {
+        const response = await fetch('/api/teacher/start-image-quiz', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageUrl: uploadedImageUrl,
+            objects: detectedObjects
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          // UI umschalten
+          quizStatus.textContent = '🟢 Aktiv';
+          quizStatus.className = 'status-badge status-active';
+          
+          startQuizBtn.style.display = 'none';
+          endQuizBtn.style.display = 'block';
+          quizStats.style.display = 'grid';
+          
+          // Stats initialisieren
+          document.getElementById('stat-objects').textContent = detectedObjects.length;
+          quizStartTime = Date.now();
+          
+          // Timer starten
+          startTimer();
+          
+          console.log('✅ Quiz gestartet!');
+        }
+        
+      } catch (error) {
+        console.error('❌ Start quiz error:', error);
+        alert('Fehler beim Starten des Quiz!');
+      }
+    });
+    
+    // Quiz beenden
+    endQuizBtn.addEventListener('click', async () => {
+      try {
+        const response = await fetch('/api/teacher/end-image-quiz', {
+          method: 'POST'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          // UI zurücksetzen
+          quizStatus.textContent = '⭕ Inaktiv';
+          quizStatus.className = 'status-badge status-inactive';
+          
+          startQuizBtn.style.display = 'block';
+          endQuizBtn.style.display = 'none';
+          
+          // Timer stoppen
+          stopTimer();
+          
+          console.log('✅ Quiz beendet!', data.stats);
+          alert(`Quiz beendet!\n\nTeilnehmer: ${data.stats.students.length}\nDauer: ${formatTime(data.stats.duration)}`);
+        }
+        
+      } catch (error) {
+        console.error('❌ End quiz error:', error);
+        alert('Fehler beim Beenden des Quiz!');
+      }
+    });
+    
+    // Timer Funktionen
+    function startTimer() {
+      timerInterval = setInterval(() => {
+        const elapsed = Date.now() - quizStartTime;
+        document.getElementById('stat-time').textContent = formatTime(elapsed);
+      }, 1000);
+    }
+    
+    function stopTimer() {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+    }
+    
+    function formatTime(ms) {
+      const seconds = Math.floor(ms / 1000);
+      const minutes = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    // Helper Funktionen
+    function showAlert(id, show) {
+      const alert = document.getElementById(id);
+      if (show) {
+        alert.classList.add('show');
+      } else {
+        alert.classList.remove('show');
+      }
+    }
+    
+    function showLoading(id, show) {
+      const loading = document.getElementById(id);
+      if (show) {
+        loading.classList.add('show');
+      } else {
+        loading.classList.remove('show');
+      }
+    }
+  </script>
+</body>
+</html>
