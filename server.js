@@ -588,11 +588,21 @@ app.post('/api/teacher/analyze-image', async (req, res) => {
           content: [
             {
               type: 'text',
-              text: `Analyze this image and list ALL visible objects in English. 
-              Return ONLY a JSON array of object names (common nouns, lowercase, singular form).
-              Include objects, people, animals, furniture, nature elements, etc.
-              Example format: ["apple", "tree", "car", "person", "dog"]
-              Be thorough and list at least 15-30 objects if possible.`
+              text: `Look at this image carefully and identify ALL visible objects.
+
+IMPORTANT: Reply with ONLY a JSON array, nothing else. No explanations, no markdown, no code blocks.
+
+Format: ["object1", "object2", "object3"]
+
+Rules:
+- Use common English nouns (lowercase)
+- Use singular form (e.g., "apple" not "apples")
+- Include: objects, people, animals, food, furniture, plants, vehicles
+- Be thorough - list 15-30 objects if possible
+- Only the JSON array, no other text
+
+Example response:
+["banana", "tree", "carrot", "fish", "egg", "cheese", "basket", "person"]`
             },
             {
               type: 'image_url',
@@ -605,29 +615,80 @@ app.post('/api/teacher/analyze-image', async (req, res) => {
     });
     
     const content = response.choices[0].message.content;
-    console.log('🔍 GPT-5 Vision Antwort:', content);
+    console.log('🔍 GPT-5 Vision Antwort (Länge:', content.length, ')');
+    console.log('🔍 Erste 500 Zeichen:', content.substring(0, 500));
     
-    // JSON extrahieren
+    // JSON extrahieren - robustes Parsing
     let detectedObjects = [];
+    
+    // Versuche 1: Direktes JSON Parsing
     try {
       detectedObjects = JSON.parse(content);
+      console.log('✅ Direktes JSON Parsing erfolgreich');
     } catch (e) {
-      const jsonMatch = content.match(/\[.*\]/s);
+      console.log('⚠️ Direktes Parsing fehlgeschlagen, versuche Regex...');
+      
+      // Versuche 2: JSON Array mit Regex extrahieren
+      const jsonMatch = content.match(/\[[\s\S]*?\]/);
       if (jsonMatch) {
-        detectedObjects = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error('Konnte keine Objekte aus der Antwort extrahieren');
+        try {
+          detectedObjects = JSON.parse(jsonMatch[0]);
+          console.log('✅ Regex-basiertes Parsing erfolgreich');
+        } catch (e2) {
+          console.error('❌ Regex-Parsing auch fehlgeschlagen:', e2);
+        }
+      }
+      
+      // Versuche 3: Markdown Code Block extrahieren
+      if (detectedObjects.length === 0) {
+        const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (codeBlockMatch) {
+          try {
+            detectedObjects = JSON.parse(codeBlockMatch[1].trim());
+            console.log('✅ Code-Block Parsing erfolgreich');
+          } catch (e3) {
+            console.error('❌ Code-Block-Parsing fehlgeschlagen:', e3);
+          }
+        }
+      }
+      
+      // Versuche 4: Zeilenweise Objekte extrahieren (falls als Liste formatiert)
+      if (detectedObjects.length === 0) {
+        const lines = content.split('\n')
+          .map(line => line.trim())
+          .filter(line => line.length > 0 && !line.startsWith('#') && !line.startsWith('-'));
+        
+        if (lines.length > 0) {
+          console.log('⚠️ Versuche zeilenweise Extraktion...');
+          // Prüfe ob es wie eine Liste aussieht
+          const listMatch = content.match(/["']([^"']+)["']/g);
+          if (listMatch) {
+            detectedObjects = listMatch.map(m => m.replace(/["']/g, '').toLowerCase().trim());
+            console.log('✅ Zeilenweise Extraktion erfolgreich');
+          }
+        }
+      }
+      
+      // Wenn immer noch leer, Fehler werfen
+      if (detectedObjects.length === 0) {
+        console.error('❌ Alle Parsing-Versuche fehlgeschlagen');
+        console.error('Vollständige Antwort:', content);
+        throw new Error('Konnte keine Objekte aus der Antwort extrahieren. GPT-5 Antwortformat unbekannt.');
       }
     }
+    
+    console.log('📊 Anzahl extrahierter Rohwerte:', detectedObjects.length);
     
     // Normalisieren: lowercase, trim, deduplizieren
     detectedObjects = [...new Set(
       detectedObjects
+        .filter(obj => typeof obj === 'string') // Nur Strings
         .map(obj => obj.toLowerCase().trim())
-        .filter(obj => obj.length > 0)
+        .filter(obj => obj.length > 0 && obj.length < 50) // Vernünftige Länge
     )];
     
-    console.log('✅ Erkannte Objekte:', detectedObjects);
+    console.log('✅ Erkannte Objekte nach Normalisierung:', detectedObjects.length);
+    console.log('📝 Objekte:', detectedObjects.slice(0, 10).join(', '), '...');
     
     res.json({
       success: true,
