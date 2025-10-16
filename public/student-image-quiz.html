@@ -410,9 +410,8 @@
     const foundGrid = document.getElementById('found-grid');
     const connectionStatus = document.getElementById('connection-status');
     
-    // WebSocket Connection (KORRIGIERT!)
+    // WebSocket Connection - FIXED: /image-quiz Route!
     function connectWebSocket() {
-      // Prüfe ob wir eine gültige Host-Adresse haben
       if (!window.location.host) {
         console.warn('⚠️ Lokale Datei erkannt - WebSocket nicht verfügbar');
         connectionStatus.textContent = '⚠️ Lokal (kein WebSocket)';
@@ -422,7 +421,7 @@
       
       try {
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${wsProtocol}//${window.location.host}`;
+        const wsUrl = `${wsProtocol}//${window.location.host}/image-quiz`; // FIXED!
         
         console.log('🔌 Verbinde mit WebSocket:', wsUrl);
         
@@ -554,7 +553,7 @@
       
       recognition.onresult = async (event) => {
         const transcript = event.results[0][0].transcript;
-        console.log('📝 Transkript:', transcript);
+        console.log('🔍 Transkript:', transcript);
         
         // Transkription anzeigen
         transcriptionText.textContent = transcript;
