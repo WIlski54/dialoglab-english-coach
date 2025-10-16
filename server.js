@@ -600,7 +600,7 @@ app.post('/api/teacher/analyze-image', async (req, res) => {
           ]
         }
       ],
-      max_tokens: 500,
+      max_completion_tokens: 500,  // GPT-5 verwendet max_completion_tokens statt max_tokens
       temperature: 0.3
     });
     
