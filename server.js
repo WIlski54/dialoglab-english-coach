@@ -591,21 +591,25 @@ app.post('/api/teacher/analyze-image', async (req, res) => {
             content: [
               {
                 type: 'text',
-                text: `Look at this image carefully and identify ALL visible objects.
+                text: `Look at this image and identify the MAIN visible objects that a student would naturally recognize.
 
-IMPORTANT: Reply with ONLY a JSON array, nothing else. No explanations, no markdown, no code blocks.
+IMPORTANT: Reply with ONLY a JSON array, nothing else.
 
 Format: ["object1", "object2", "object3"]
 
 Rules:
-- Use common English nouns (lowercase)
-- Use singular form (e.g., "apple" not "apples")
-- Include: objects, people, animals, food, furniture, plants, vehicles
-- Be thorough - list 15-30 objects if possible
-- Only the JSON array, no other text
+- Use common English nouns (lowercase, singular form)
+- Only list MAIN, OBVIOUS objects - not small details or parts
+- Ignore: shadows, reflections, backgrounds, small decorative elements
+- Include: food items, animals, people, furniture, vehicles, plants (as whole objects)
+- A student should be able to identify these without overthinking
+- List 10-20 main objects
+
+Good examples: "apple", "banana", "car", "person", "tree", "house"
+Bad examples: "leaf" (part of apple), "stem", "shadow", "texture"
 
 Example response:
-["banana", "tree", "carrot", "fish", "egg", "cheese", "basket", "person"]`
+["banana", "carrot", "cheese", "apple", "basket", "table"]`
               },
               {
                 type: 'image_url',
@@ -690,6 +694,20 @@ Example response:
     }
     
     console.log('📊 Anzahl extrahierter Rohwerte:', detectedObjects.length);
+    
+    // Filter: Entferne zu detaillierte/kleine Objekte
+    const detailsBlacklist = [
+      'leaf', 'stem', 'shadow', 'reflection', 'background',
+      'surface', 'texture', 'pattern', 'spot', 'mark',
+      'light', 'shine', 'glow', 'edge', 'corner',
+      'line', 'dot', 'pixel', 'color', 'shade'
+    ];
+    
+    detectedObjects = detectedObjects.filter(obj => 
+      !detailsBlacklist.includes(obj.toLowerCase())
+    );
+    
+    console.log('🧹 Nach Detail-Filter:', detectedObjects.length);
     
     // Normalisieren: lowercase, trim, deduplizieren
     detectedObjects = [...new Set(
