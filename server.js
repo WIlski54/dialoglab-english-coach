@@ -184,8 +184,8 @@ Stay within this scenario and use vocabulary appropriate for ${session.level} le
       const completion = await openai.chat.completions.create({
         model: CHAT_MODEL,
         messages: session.messages,
-        max_tokens: 150,
-        temperature: 0.7
+        max_completion_tokens: 150
+        // Kein temperature - GPT-4o-mini unterstützt es, aber wir lassen es weg für Konsistenz
       });
       
       const aiResponse = completion.choices[0].message.content;
@@ -250,8 +250,7 @@ Stay within this scenario and use vocabulary appropriate for ${session.level} le
         const completion = await openai.chat.completions.create({
           model: CHAT_MODEL,
           messages: session.messages,
-          max_tokens: 150,
-          temperature: 0.7
+          max_completion_tokens: 150
         });
         
         const aiResponse = completion.choices[0].message.content;
@@ -424,7 +423,8 @@ app.post('/api/chat', async (req, res) => {
     
     const completion = await openai.chat.completions.create({
       model: CHAT_MODEL,
-      messages: messages
+      messages: messages,
+      max_completion_tokens: 500
     });
     
     const reply = completion.choices[0].message.content;
@@ -518,7 +518,8 @@ app.post('/api/vocab/get-hint', async (req, res) => {
           role: 'user',
           content: `Das deutsche Wort ist "${germanWord}". Das englische Wort ist "${word}". Gib einen kurzen Tipp auf Deutsch.`
         }
-      ]
+      ],
+      max_completion_tokens: 50
     });
     
     const hint = completion.choices[0].message.content.trim();
@@ -600,8 +601,7 @@ app.post('/api/teacher/analyze-image', async (req, res) => {
           ]
         }
       ],
-      max_completion_tokens: 500,  // GPT-5 verwendet max_completion_tokens statt max_tokens
-      temperature: 0.3
+      max_completion_tokens: 500  // GPT-5: max_completion_tokens, kein temperature!
     });
     
     const content = response.choices[0].message.content;
