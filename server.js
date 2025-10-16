@@ -56,7 +56,7 @@ const openai = new OpenAI({
 const CHAT_MODEL = process.env.CHAT_MODEL || 'gpt-4o-mini';
 const TTS_MODEL = process.env.TTS_MODEL || 'tts-1';
 const TTS_VOICE = process.env.TTS_VOICE || 'alloy';
-const VISION_MODEL = process.env.VISION_MODEL || 'gpt-5'; // GPT-5 mit Vision!
+const VISION_MODEL = process.env.VISION_MODEL || 'gpt-4o'; // Fallback auf gpt-4o für Vision!
 
 // ========================================
 // Uploads Ordner sicherstellen
@@ -572,23 +572,26 @@ app.post('/api/teacher/analyze-image', async (req, res) => {
     
     console.log('🔍 Analysiere Bild:', imageUrl);
     
-    // Vollständige URL konstruieren
+    // Vollständige URL konstruieren - IMMER HTTPS!
     const fullImageUrl = imageUrl.startsWith('http') 
-      ? imageUrl 
-      : `${req.protocol}://${req.get('host')}${imageUrl}`;
+      ? imageUrl.replace('http://', 'https://') // Force HTTPS!
+      : `https://${req.get('host')}${imageUrl}`;
     
     console.log('🌐 Full URL:', fullImageUrl);
+    console.log('🔐 URL verwendet HTTPS:', fullImageUrl.startsWith('https'));
     
-    // GPT-5 Vision API Call
-    const response = await openai.chat.completions.create({
-      model: VISION_MODEL,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `Look at this image carefully and identify ALL visible objects.
+    // GPT-5 Vision API Call mit Error Handling
+    let response;
+    try {
+      response = await openai.chat.completions.create({
+        model: VISION_MODEL,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `Look at this image carefully and identify ALL visible objects.
 
 IMPORTANT: Reply with ONLY a JSON array, nothing else. No explanations, no markdown, no code blocks.
 
@@ -603,16 +606,25 @@ Rules:
 
 Example response:
 ["banana", "tree", "carrot", "fish", "egg", "cheese", "basket", "person"]`
-            },
-            {
-              type: 'image_url',
-              image_url: { url: fullImageUrl }
-            }
-          ]
-        }
-      ],
-      max_completion_tokens: 500  // GPT-5: max_completion_tokens, kein temperature!
-    });
+              },
+              {
+                type: 'image_url',
+                image_url: { url: fullImageUrl }
+              }
+            ]
+          }
+        ],
+        max_completion_tokens: 500  // GPT-5: max_completion_tokens, kein temperature!
+      });
+      
+      console.log('✅ OpenAI API Call erfolgreich');
+      console.log('📊 Response Status:', response);
+      
+    } catch (apiError) {
+      console.error('❌ OpenAI API Error:', apiError.message);
+      console.error('📄 Error Details:', JSON.stringify(apiError, null, 2));
+      throw new Error(`OpenAI API Error: ${apiError.message}`);
+    }
     
     const content = response.choices[0].message.content;
     console.log('🔍 GPT-5 Vision Antwort (Länge:', content.length, ')');
