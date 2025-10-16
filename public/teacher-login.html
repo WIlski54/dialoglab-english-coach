@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Lehrer Login - DialogLab</title>
+  <title>Lehrer-Login - DialogLab</title>
   <style>
     * {
       margin: 0;
@@ -23,32 +23,31 @@
     
     .login-container {
       background: white;
-      border-radius: 20px;
+      border-radius: 16px;
       padding: 48px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.3);
       max-width: 450px;
       width: 100%;
     }
     
-    .login-header {
+    .logo {
       text-align: center;
-      margin-bottom: 32px;
-    }
-    
-    .login-icon {
-      font-size: 72px;
-      margin-bottom: 16px;
+      font-size: 64px;
+      margin-bottom: 24px;
     }
     
     h1 {
-      font-size: 32px;
+      text-align: center;
       color: #333;
       margin-bottom: 8px;
+      font-size: 28px;
     }
     
     .subtitle {
+      text-align: center;
       color: #666;
-      font-size: 16px;
+      margin-bottom: 32px;
+      font-size: 14px;
     }
     
     .form-group {
@@ -57,23 +56,26 @@
     
     label {
       display: block;
-      color: #555;
+      color: #374151;
       font-weight: 600;
       margin-bottom: 8px;
+      font-size: 14px;
     }
     
-    input {
+    input[type="password"] {
       width: 100%;
       padding: 14px 16px;
       border: 2px solid #e5e7eb;
-      border-radius: 10px;
+      border-radius: 8px;
       font-size: 16px;
+      font-family: inherit;
       transition: border-color 0.3s;
     }
     
-    input:focus {
+    input[type="password"]:focus {
       outline: none;
       border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
     }
     
     .btn-login {
@@ -82,33 +84,37 @@
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
       border: none;
-      border-radius: 10px;
+      border-radius: 8px;
       font-size: 18px;
       font-weight: 600;
       cursor: pointer;
-      transition: transform 0.2s;
+      transition: all 0.3s;
     }
     
     .btn-login:hover {
       transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
     }
     
-    .btn-login:active {
-      transform: translateY(0);
+    .btn-login:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
     }
     
-    .error-message {
+    .error-msg {
       background: #fee2e2;
-      color: #991b1b;
-      padding: 12px 16px;
+      color: #dc2626;
+      padding: 12px;
       border-radius: 8px;
-      margin-bottom: 24px;
+      margin-bottom: 16px;
+      font-size: 14px;
       display: none;
-      animation: shake 0.5s;
     }
     
-    .error-message.show {
+    .error-msg.show {
       display: block;
+      animation: shake 0.5s;
     }
     
     @keyframes shake {
@@ -117,142 +123,136 @@
       75% { transform: translateX(10px); }
     }
     
-    .back-link {
-      text-align: center;
+    .info-box {
+      background: #eff6ff;
+      border-left: 4px solid #3b82f6;
+      padding: 16px;
+      border-radius: 8px;
       margin-top: 24px;
+      font-size: 14px;
+      color: #1e40af;
     }
     
-    .back-link a {
+    .back-btn {
+      display: block;
+      text-align: center;
+      margin-top: 24px;
       color: #667eea;
       text-decoration: none;
       font-weight: 600;
+      transition: color 0.3s;
     }
     
-    .back-link a:hover {
-      text-decoration: underline;
-    }
-    
-    .password-toggle {
-      position: relative;
-    }
-    
-    .toggle-btn {
-      position: absolute;
-      right: 12px;
-      top: 50%;
-      transform: translateY(-50%);
-      background: none;
-      border: none;
-      cursor: pointer;
-      font-size: 20px;
-      padding: 4px;
+    .back-btn:hover {
+      color: #764ba2;
     }
   </style>
 </head>
 <body>
   <div class="login-container">
-    <!-- Header -->
-    <div class="login-header">
-      <div class="login-icon">🔐</div>
-      <h1>Lehrer-Login</h1>
-      <p class="subtitle">Zugang zum Bild-Quiz Dashboard</p>
-    </div>
+    <div class="logo">🔐</div>
+    <h1>Lehrer-Login</h1>
+    <p class="subtitle">Zugang zum Lehrer-Dashboard</p>
     
-    <!-- Error Message -->
-    <div class="error-message" id="error-message">
-      ❌ Falsches Passwort! Bitte versuche es erneut.
-    </div>
+    <div class="error-msg" id="error-msg"></div>
     
-    <!-- Login Form -->
     <form id="login-form">
       <div class="form-group">
-        <label for="password">Passwort</label>
-        <div class="password-toggle">
-          <input 
-            type="password" 
-            id="password" 
-            placeholder="Gib dein Lehrer-Passwort ein" 
-            autocomplete="off"
-            required
-          >
-          <button type="button" class="toggle-btn" id="toggle-password">
-            👁️
-          </button>
-        </div>
+        <label for="password">Passwort:</label>
+        <input 
+          type="password" 
+          id="password" 
+          placeholder="Lehrer-Passwort eingeben"
+          autocomplete="current-password"
+          required
+        >
       </div>
       
-      <button type="submit" class="btn-login">
-        🚀 Zum Dashboard
+      <button type="submit" class="btn-login" id="login-btn">
+        🚀 Anmelden
       </button>
     </form>
     
-    <!-- Back Link -->
-    <div class="back-link">
-      <a href="/index.html">← Zurück zur Startseite</a>
+    <div class="info-box">
+      <strong>💡 Hinweis:</strong> Nach erfolgreichem Login hast du Zugriff auf alle Steuerungsmodule:
+      <ul style="margin-top: 8px; margin-left: 20px;">
+        <li>Dialog-Lab Monitoring</li>
+        <li>Vokabel-Trainer Info</li>
+        <li>Bild-Quiz Steuerung</li>
+      </ul>
     </div>
+    
+    <a href="/" class="back-btn">← Zurück zur Startseite</a>
   </div>
   
   <script>
     const form = document.getElementById('login-form');
     const passwordInput = document.getElementById('password');
-    const errorMessage = document.getElementById('error-message');
-    const toggleBtn = document.getElementById('toggle-password');
+    const loginBtn = document.getElementById('login-btn');
+    const errorMsg = document.getElementById('error-msg');
     
-    // Passwort anzeigen/verbergen
-    toggleBtn.addEventListener('click', () => {
-      if (passwordInput.type === 'password') {
-        passwordInput.type = 'text';
-        toggleBtn.textContent = '🙈';
-      } else {
-        passwordInput.type = 'password';
-        toggleBtn.textContent = '👁️';
-      }
-    });
+    // Auto-focus password field
+    passwordInput.focus();
     
-    // Form Submit
+    // Handle form submission
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       
-      const password = passwordInput.value;
+      const password = passwordInput.value.trim();
+      
+      if (!password) {
+        showError('Bitte Passwort eingeben!');
+        return;
+      }
+      
+      // Disable button during login
+      loginBtn.disabled = true;
+      loginBtn.textContent = '⏳ Anmeldung läuft...';
+      errorMsg.classList.remove('show');
       
       try {
-        // API-Call zum Backend
         const response = await fetch('/api/teacher/login', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json'
+          },
           body: JSON.stringify({ password })
         });
         
         const data = await response.json();
         
         if (data.success) {
-          // Erfolgreich → zum Dashboard
-          sessionStorage.setItem('teacher-authenticated', 'true');
-          window.location.href = '/teacher-image-quiz.html';
+          // Save session
+          localStorage.setItem('teacherSession', data.sessionId);
+          
+          // Redirect to dashboard
+          window.location.href = '/teacher-dashboard.html';
         } else {
-          // Fehler → Fehlermeldung anzeigen
-          showError();
+          showError(data.error || 'Login fehlgeschlagen');
+          loginBtn.disabled = false;
+          loginBtn.textContent = '🚀 Anmelden';
+          passwordInput.value = '';
+          passwordInput.focus();
         }
         
       } catch (error) {
-        console.error('Login error:', error);
-        showError();
+        showError('Verbindungsfehler: ' + error.message);
+        loginBtn.disabled = false;
+        loginBtn.textContent = '🚀 Anmelden';
       }
     });
     
-    // Fehlermeldung anzeigen
-    function showError() {
-      errorMessage.classList.add('show');
-      passwordInput.value = '';
-      passwordInput.focus();
+    function showError(message) {
+      errorMsg.textContent = '❌ ' + message;
+      errorMsg.classList.add('show');
       
-      // Nach 3 Sekunden ausblenden
+      // Remove shake class after animation
       setTimeout(() => {
-        errorMessage.classList.remove('show');
+        errorMsg.classList.remove('show');
       }, 3000);
     }
     
-    // Enter-Taste im Password-Feld
+    // Enter key support
     passwordInput.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') {
         form.dispatchEvent(new Event('submit'));
