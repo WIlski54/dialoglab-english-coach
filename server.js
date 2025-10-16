@@ -778,7 +778,7 @@ app.post('/api/teacher/start-image-quiz', (req, res) => {
   }
 });
 
-// Objekt-Antwort prüfen (Schüler)
+// Objekt-Antwort prüfen (Schüler) - INTELLIGENTE VERSION!
 app.post('/api/student/check-object', (req, res) => {
   try {
     const { studentId, object } = req.body;
@@ -794,41 +794,137 @@ app.post('/api/student/check-object', (req, res) => {
       return res.status(400).json({ error: 'StudentId und object erforderlich' });
     }
     
-    const normalizedObject = object.toLowerCase().trim();
+    // Hilfsfunktion: Plural/Singular normalisieren
+    function normalizePlural(word) {
+      const w = word.toLowerCase().trim();
+      
+      // Bereits Singular? Beides zurückgeben
+      if (!w.endsWith('s')) {
+        return [w, w + 's'];
+      }
+      
+      // Plural → Singular versuchen
+      if (w.endsWith('ies')) {
+        // berries → berry
+        return [w.slice(0, -3) + 'y', w];
+      } else if (w.endsWith('es')) {
+        // boxes → box, aber apples → apple
+        if (w.endsWith('shes') || w.endsWith('ches') || w.endsWith('xes')) {
+          return [w.slice(0, -2), w];
+        }
+        return [w.slice(0, -2), w.slice(0, -1), w];
+      } else if (w.endsWith('s')) {
+        // carrots → carrot
+        return [w.slice(0, -1), w];
+      }
+      
+      return [w];
+    }
     
-    // Prüfe ob Objekt im Bild ist
-    const isCorrect = activeImageQuiz.detectedObjects.includes(normalizedObject);
-    
-    // Prüfe ob Schüler dieses Objekt bereits genannt hat
+    // Student-Antworten tracken
     if (!activeImageQuiz.studentsAnswers.has(studentId)) {
       activeImageQuiz.studentsAnswers.set(studentId, new Set());
     }
-    
     const studentAnswers = activeImageQuiz.studentsAnswers.get(studentId);
-    const alreadyGuessed = studentAnswers.has(normalizedObject);
     
-    let points = 0;
-    let message = '';
+    // INTELLIGENZ: Mehrere Wörter in der Antwort erkennen
+    const words = object.toLowerCase()
+      .split(/[\s,]+/)  // Split bei Leerzeichen und Kommas
+      .map(w => w.trim())
+      .filter(w => w.length > 0);
     
-    if (!isCorrect) {
-      message = `"${object}" ist nicht im Bild!`;
-    } else if (alreadyGuessed) {
-      message = `"${object}" hast du bereits genannt!`;
-    } else {
-      studentAnswers.add(normalizedObject);
-      points = 10;
-      message = `Richtig! "${object}" gefunden! +${points} Punkte`;
+    console.log(`🎯 Schüler ${studentId} hat gesagt: "${object}"`);
+    console.log(`📝 Erkannte Wörter:`, words);
+    
+    // Ergebnisse sammeln
+    let correctWords = [];
+    let incorrectWords = [];
+    let alreadyGuessedWords = [];
+    let totalPoints = 0;
+    
+    for (const word of words) {
+      // Normalisiere Plural/Singular
+      const variants = normalizePlural(word);
+      
+      // Prüfe ob irgendeine Variante im Bild ist
+      let foundVariant = null;
+      for (const variant of variants) {
+        if (activeImageQuiz.detectedObjects.includes(variant)) {
+          foundVariant = variant;
+          break;
+        }
+      }
+      
+      if (foundVariant) {
+        // Prüfe ob bereits genannt
+        const alreadyNamed = variants.some(v => studentAnswers.has(v));
+        
+        if (alreadyNamed) {
+          alreadyGuessedWords.push(word);
+        } else {
+          correctWords.push(word);
+          // Alle Varianten als "genannt" markieren
+          variants.forEach(v => studentAnswers.add(v));
+          totalPoints += 10;
+        }
+      } else {
+        incorrectWords.push(word);
+      }
     }
     
-    console.log(`🎯 Schüler ${studentId}: ${object} → ${isCorrect ? '✅' : '❌'} (${points} Punkte)`);
+    console.log(`✅ Richtig: ${correctWords.length}, ❌ Falsch: ${incorrectWords.length}, ⚠️ Bereits genannt: ${alreadyGuessedWords.length}`);
+    
+    // Feedback generieren
+    let message = '';
+    let responseType = 'incorrect';
+    
+    if (correctWords.length > 0) {
+      responseType = 'correct';
+      if (correctWords.length === 1) {
+        message = `Richtig! "${correctWords[0]}" gefunden! +${totalPoints} Punkte`;
+      } else {
+        message = `Super! ${correctWords.length} Objekte gefunden: ${correctWords.join(', ')}! +${totalPoints} Punkte`;
+      }
+      
+      // Zusätzliche Infos anhängen
+      if (alreadyGuessedWords.length > 0) {
+        message += ` (${alreadyGuessedWords.join(', ')} hattest du schon)`;
+      }
+      if (incorrectWords.length > 0) {
+        message += ` (${incorrectWords.join(', ')} nicht im Bild)`;
+      }
+    } else if (alreadyGuessedWords.length > 0) {
+      responseType = 'already';
+      if (alreadyGuessedWords.length === 1) {
+        message = `"${alreadyGuessedWords[0]}" hast du bereits genannt!`;
+      } else {
+        message = `Diese Objekte hast du bereits genannt: ${alreadyGuessedWords.join(', ')}`;
+      }
+      
+      if (incorrectWords.length > 0) {
+        message += ` (${incorrectWords.join(', ')} nicht im Bild)`;
+      }
+    } else {
+      // Alles falsch
+      if (words.length === 1) {
+        message = `"${words[0]}" ist nicht im Bild!`;
+      } else {
+        message = `Diese Objekte sind nicht im Bild: ${incorrectWords.join(', ')}`;
+      }
+    }
     
     res.json({
-      correct: isCorrect && !alreadyGuessed,
-      points: points,
+      correct: correctWords.length > 0,
+      points: totalPoints,
       message: message,
-      alreadyGuessed: alreadyGuessed,
+      alreadyGuessed: alreadyGuessedWords.length > 0 && correctWords.length === 0,
       totalFound: studentAnswers.size,
-      totalObjects: activeImageQuiz.detectedObjects.length
+      totalObjects: activeImageQuiz.detectedObjects.length,
+      details: {
+        correct: correctWords,
+        incorrect: incorrectWords,
+        alreadyGuessed: alreadyGuessedWords
+      }
     });
     
   } catch (error) {
