@@ -17,10 +17,16 @@ const fs = require('fs');
 const app = express();
 const server = http.createServer(app);
 
-// WebSocket Server auf /ws Path
-const wss = new WebSocket.Server({ 
+// WebSocket Server auf /ws Path (Dialog-Lab)
+const wssDialogLab = new WebSocket.Server({ 
   server,
   path: '/ws'
+});
+
+// WebSocket Server auf /image-quiz Path (Bild-Quiz)
+const wssImageQuiz = new WebSocket.Server({
+  server,
+  path: '/image-quiz'
 });
 
 // Body Parser Limits
@@ -80,6 +86,15 @@ const vocabStats = {
 };
 const quizSessions = [];
 
+// Image Quiz State
+let currentImageQuiz = {
+  active: false,
+  imageUrl: null,
+  objects: [],
+  students: new Map(), // studentId -> { found: [], score: 0 }
+  startTime: null
+};
+
 // ========================================
 // MODUL 1: Dialog-Lab WebSocket
 // ========================================
@@ -93,29 +108,21 @@ function getScenarioPrompt(scenario, level) {
 
   const prompts = {
     restaurant: `You are a friendly waiter in an English restaurant. Help the student practice ordering food. ${levelGuides[level] || levelGuides.A2} Be encouraging and patient. Speak only English. Keep responses conversational and natural. Correct mistakes gently by rephrasing correctly.`,
-    
     shopping: `You are a helpful shop assistant in an English store. Help the student practice shopping conversations. ${levelGuides[level] || levelGuides.A2} Be encouraging and patient. Speak only English. Keep responses conversational and natural. Correct mistakes gently by rephrasing correctly.`,
-    
     airport: `You are a friendly airport staff member. Help the student practice airport conversations like check-in, security, and finding gates. ${levelGuides[level] || levelGuides.A2} Be encouraging and patient. Speak only English. Keep responses conversational and natural. Correct mistakes gently by rephrasing correctly.`,
-    
     doctor: `You are a caring doctor in an English clinic. Help the student practice describing symptoms and medical conversations. ${levelGuides[level] || levelGuides.A2} Be encouraging and patient. Speak only English. Keep responses conversational and natural. Correct mistakes gently by rephrasing correctly.`,
-    
     hotel: `You are a friendly hotel receptionist. Help the student practice hotel conversations like check-in, room service, and asking for directions. ${levelGuides[level] || levelGuides.A2} Be encouraging and patient. Speak only English. Keep responses conversational and natural. Correct mistakes gently by rephrasing correctly.`,
-    
     school: `You are a friendly teacher helping students with school-related conversations. ${levelGuides[level] || levelGuides.A2} Be encouraging and patient. Speak only English. Keep responses conversational and natural.`,
-    
     shop: `You are a helpful shop assistant. Help the student practice shopping conversations. ${levelGuides[level] || levelGuides.A2} Be encouraging and patient. Speak only English.`,
-    
     food: `You are a friendly restaurant server helping students order food. ${levelGuides[level] || levelGuides.A2} Be encouraging and patient. Speak only English.`,
-    
     present: `You are a helpful shop assistant in a gift shop. Help the student practice buying presents. ${levelGuides[level] || levelGuides.A2} Be encouraging and patient. Speak only English.`
   };
 
   return prompts[scenario] || prompts.restaurant;
 }
 
-wss.on('connection', (ws) => {
-  console.log('📡 Client verbunden');
+wssDialogLab.on('connection', (ws) => {
+  console.log('📡 Dialog-Lab Client verbunden');
   
   let sessionData = {
     messages: [],
@@ -130,15 +137,13 @@ wss.on('connection', (ws) => {
   ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message);
-      console.log('📨 Received:', data.type);
+      console.log('📨 Dialog-Lab Received:', data.type);
 
-      // Szenario wechseln
       if (data.type === 'change_scenario') {
         sessionData.scenario = data.scenario || 'restaurant';
         sessionData.level = data.level || 'A2';
-        sessionData.messages = []; // Reset conversation
+        sessionData.messages = [];
         
-        // Save to sessions map
         dialogSessions.set(sessionData.sessionId, {
           ...sessionData,
           messages: [...sessionData.messages]
@@ -152,7 +157,7 @@ wss.on('connection', (ws) => {
         
         console.log(`✅ Scenario: ${sessionData.scenario}, Level: ${sessionData.level}`);
         
-        // AUTOMATISCH: KI startet das Gespräch
+        // KI startet automatisch das Gespräch
         try {
           const completion = await openai.chat.completions.create({
             model: 'gpt-4o-mini',
@@ -177,13 +182,11 @@ wss.on('connection', (ws) => {
             content: aiText
           });
           
-          // Update session
           dialogSessions.set(sessionData.sessionId, {
             ...sessionData,
             messages: [...sessionData.messages]
           });
 
-          // Text-to-Speech generieren
           let audioBase64 = null;
           try {
             const mp3 = await openai.audio.speech.create({
@@ -198,7 +201,6 @@ wss.on('connection', (ws) => {
             console.error('TTS Error:', audioError);
           }
 
-          // Automatische Begrüßung senden
           ws.send(JSON.stringify({
             type: 'ai_response',
             text: aiText,
@@ -212,7 +214,6 @@ wss.on('connection', (ws) => {
         }
       }
 
-      // User Text-Nachricht
       if (data.type === 'user_text') {
         const userMessage = data.text;
         
@@ -221,7 +222,6 @@ wss.on('connection', (ws) => {
           content: userMessage
         });
 
-        // AI Response generieren
         const completion = await openai.chat.completions.create({
           model: 'gpt-4o-mini',
           messages: [
@@ -242,13 +242,11 @@ wss.on('connection', (ws) => {
           content: aiText
         });
         
-        // Update session in map
         dialogSessions.set(sessionData.sessionId, {
           ...sessionData,
           messages: [...sessionData.messages]
         });
 
-        // Text-to-Speech generieren
         let audioBase64 = null;
         try {
           const mp3 = await openai.audio.speech.create({
@@ -263,7 +261,6 @@ wss.on('connection', (ws) => {
           console.error('TTS Error:', audioError);
         }
 
-        // Response senden
         ws.send(JSON.stringify({
           type: 'ai_response',
           text: aiText,
@@ -274,7 +271,7 @@ wss.on('connection', (ws) => {
       }
 
     } catch (error) {
-      console.error('❌ WebSocket Error:', error);
+      console.error('❌ Dialog-Lab WebSocket Error:', error);
       ws.send(JSON.stringify({
         type: 'error',
         message: 'Ein Fehler ist aufgetreten'
@@ -283,7 +280,7 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
-    console.log('📡 Client getrennt');
+    console.log('📡 Dialog-Lab Client getrennt');
     if (sessionData) {
       const session = dialogSessions.get(sessionData.sessionId);
       if (session) {
@@ -298,7 +295,6 @@ wss.on('connection', (ws) => {
 // MODUL 2: Vokabel-Trainer API
 // ========================================
 
-// TTS für Vokabeln
 app.post('/api/speak', async (req, res) => {
   try {
     const { text } = req.body;
@@ -318,7 +314,6 @@ app.post('/api/speak', async (req, res) => {
   }
 });
 
-// KI-Tipp für Vokabeln
 app.post('/api/vocab-hint', async (req, res) => {
   try {
     const { english, german } = req.body;
@@ -346,14 +341,12 @@ app.post('/api/vocab-hint', async (req, res) => {
   }
 });
 
-// Aussprache-Check
 app.post('/api/check-pronunciation', async (req, res) => {
   try {
     const { audio } = req.body;
     
     const audioBuffer = Buffer.from(audio.split(',')[1], 'base64');
     
-    // Create temporary file for Whisper API
     const tempFile = path.join(__dirname, 'temp_audio.webm');
     fs.writeFileSync(tempFile, audioBuffer);
     
@@ -362,7 +355,6 @@ app.post('/api/check-pronunciation', async (req, res) => {
       model: 'whisper-1'
     });
     
-    // Clean up temp file
     fs.unlinkSync(tempFile);
 
     res.json({ 
@@ -375,7 +367,6 @@ app.post('/api/check-pronunciation', async (req, res) => {
   }
 });
 
-// Vokabel-Statistik speichern
 app.post('/api/vocab-stats', (req, res) => {
   try {
     const { english, german, correct } = req.body;
@@ -406,12 +397,10 @@ app.post('/api/vocab-stats', (req, res) => {
   }
 });
 
-// Vokabel-Statistik abrufen (für Dashboard)
 app.get('/api/vocab-stats', (req, res) => {
   try {
     const wordsArray = Array.from(vocabStats.words.values());
     
-    // Top 20 schwierigste Vokabeln
     const difficultWords = wordsArray
       .filter(w => w.attempts >= 2)
       .sort((a, b) => {
@@ -436,7 +425,7 @@ app.get('/api/vocab-stats', (req, res) => {
 });
 
 // ========================================
-// MODUL 3: Bild-Quiz API
+// MODUL 3: Bild-Quiz (Einzelschüler)
 // ========================================
 
 app.post('/api/analyze-image', upload.single('image'), async (req, res) => {
@@ -464,7 +453,6 @@ app.post('/api/analyze-image', upload.single('image'), async (req, res) => {
 
     const answer = completion.choices[0].message.content;
 
-    // Session speichern
     const sessionId = `quiz_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const quizSession = {
       sessionId,
@@ -479,7 +467,6 @@ app.post('/api/analyze-image', upload.single('image'), async (req, res) => {
       timestamp: new Date()
     };
 
-    // Prüfen ob bereits eine Session für dieses Bild existiert
     const existingSession = quizSessions.find(s => s.imageUrl === imageUrl && s.studentName === studentName);
     
     if (existingSession) {
@@ -505,7 +492,6 @@ app.post('/api/analyze-image', upload.single('image'), async (req, res) => {
   }
 });
 
-// Quiz-Sessions abrufen (für Dashboard)
 app.get('/api/quiz-sessions', (req, res) => {
   try {
     res.json(quizSessions);
@@ -515,7 +501,6 @@ app.get('/api/quiz-sessions', (req, res) => {
   }
 });
 
-// Einzelne Quiz-Session abrufen
 app.get('/api/quiz-sessions/:sessionId', (req, res) => {
   try {
     const session = quizSessions.find(s => s.sessionId === req.params.sessionId);
@@ -530,10 +515,221 @@ app.get('/api/quiz-sessions/:sessionId', (req, res) => {
 });
 
 // ========================================
-// Dialog-Lab Session Management (für Dashboard)
+// MODUL 4: Lehrer-Bild-Quiz System
 // ========================================
 
-// Alle Sessions abrufen
+// Lehrer: Bild hochladen
+app.post('/api/teacher/upload-image', upload.single('image'), (req, res) => {
+  try {
+    const imageUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+    res.json({ 
+      success: true,
+      imageUrl 
+    });
+  } catch (error) {
+    console.error('Upload Error:', error);
+    res.status(500).json({ error: 'Upload fehlgeschlagen' });
+  }
+});
+
+// Lehrer: Bild analysieren mit GPT Vision
+app.post('/api/teacher/analyze-image', async (req, res) => {
+  try {
+    const { imageUrl } = req.body;
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are analyzing an image for an English learning game. List ALL visible objects in the image, one per line. Only return object names in English, nothing else. Use singular forms. Be specific (e.g., "red car" not just "car"). Return 10-20 objects.'
+        },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'List all objects you can see in this image:' },
+            { type: 'image_url', image_url: { url: imageUrl } }
+          ]
+        }
+      ],
+      max_tokens: 300
+    });
+
+    const objectsText = completion.choices[0].message.content;
+    const objects = objectsText.split('\n')
+      .map(line => line.trim().replace(/^[-•*]\s*/, '').toLowerCase())
+      .filter(obj => obj.length > 0);
+
+    res.json({
+      success: true,
+      objects,
+      count: objects.length
+    });
+
+  } catch (error) {
+    console.error('Analyze Error:', error);
+    res.status(500).json({ error: 'Analyse fehlgeschlagen' });
+  }
+});
+
+// Lehrer: Quiz starten
+app.post('/api/teacher/start-image-quiz', (req, res) => {
+  try {
+    const { imageUrl, objects } = req.body;
+
+    currentImageQuiz = {
+      active: true,
+      imageUrl,
+      objects: objects.map(obj => obj.toLowerCase()),
+      students: new Map(),
+      startTime: Date.now()
+    };
+
+    // Broadcast an alle Schüler
+    wssImageQuiz.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({
+          type: 'image_quiz_start',
+          imageUrl,
+          totalObjects: objects.length
+        }));
+      }
+    });
+
+    console.log('✅ Image Quiz gestartet mit', objects.length, 'Objekten');
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Start Quiz Error:', error);
+    res.status(500).json({ error: 'Quiz konnte nicht gestartet werden' });
+  }
+});
+
+// Lehrer: Quiz beenden
+app.post('/api/teacher/end-image-quiz', (req, res) => {
+  try {
+    const duration = Date.now() - currentImageQuiz.startTime;
+    const students = Array.from(currentImageQuiz.students.entries()).map(([id, data]) => ({
+      id,
+      found: data.found.length,
+      score: data.score
+    }));
+
+    // Broadcast an alle Schüler
+    wssImageQuiz.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({
+          type: 'image_quiz_end'
+        }));
+      }
+    });
+
+    currentImageQuiz.active = false;
+
+    console.log('✅ Image Quiz beendet');
+
+    res.json({
+      success: true,
+      stats: {
+        duration,
+        students
+      }
+    });
+  } catch (error) {
+    console.error('End Quiz Error:', error);
+    res.status(500).json({ error: 'Quiz konnte nicht beendet werden' });
+  }
+});
+
+// Schüler: Objekt prüfen
+app.post('/api/student/check-object', (req, res) => {
+  try {
+    const { studentId, object } = req.body;
+
+    if (!currentImageQuiz.active) {
+      return res.json({
+        correct: false,
+        message: 'Kein aktives Quiz',
+        alreadyGuessed: false
+      });
+    }
+
+    if (!currentImageQuiz.students.has(studentId)) {
+      currentImageQuiz.students.set(studentId, {
+        found: [],
+        score: 0
+      });
+    }
+
+    const studentData = currentImageQuiz.students.get(studentId);
+    const objectLower = object.toLowerCase().trim();
+
+    // Prüfe ob bereits gefunden
+    if (studentData.found.includes(objectLower)) {
+      return res.json({
+        correct: false,
+        message: 'Du hast dieses Objekt bereits gefunden!',
+        alreadyGuessed: true,
+        totalFound: studentData.found.length
+      });
+    }
+
+    // Prüfe ob im Bild vorhanden (mit Plural/Singular Toleranz)
+    const singularForm = objectLower.replace(/s$/, '');
+    const isCorrect = currentImageQuiz.objects.some(obj => {
+      const objSingular = obj.replace(/s$/, '');
+      return obj === objectLower || objSingular === singularForm;
+    });
+
+    if (isCorrect) {
+      studentData.found.push(objectLower);
+      const points = 10;
+      studentData.score += points;
+
+      return res.json({
+        correct: true,
+        message: `Richtig! "${object}" gefunden!`,
+        points,
+        totalFound: studentData.found.length,
+        alreadyGuessed: false
+      });
+    } else {
+      return res.json({
+        correct: false,
+        message: `"${object}" ist nicht im Bild.`,
+        totalFound: studentData.found.length,
+        alreadyGuessed: false
+      });
+    }
+
+  } catch (error) {
+    console.error('Check Object Error:', error);
+    res.status(500).json({ error: 'Fehler beim Prüfen' });
+  }
+});
+
+// Image Quiz WebSocket (für Schüler)
+wssImageQuiz.on('connection', (ws) => {
+  console.log('📡 Image-Quiz Client verbunden');
+
+  // Sende aktuelles Quiz falls aktiv
+  if (currentImageQuiz.active) {
+    ws.send(JSON.stringify({
+      type: 'image_quiz_start',
+      imageUrl: currentImageQuiz.imageUrl,
+      totalObjects: currentImageQuiz.objects.length
+    }));
+  }
+
+  ws.on('close', () => {
+    console.log('📡 Image-Quiz Client getrennt');
+  });
+});
+
+// ========================================
+// Dialog-Lab Session Management
+// ========================================
+
 app.get('/api/sessions', (req, res) => {
   try {
     const sessions = Array.from(dialogSessions.values());
@@ -544,7 +740,6 @@ app.get('/api/sessions', (req, res) => {
   }
 });
 
-// Einzelne Session abrufen
 app.get('/api/sessions/:sessionId', (req, res) => {
   try {
     const session = dialogSessions.get(req.params.sessionId);
@@ -558,7 +753,6 @@ app.get('/api/sessions/:sessionId', (req, res) => {
   }
 });
 
-// Session beenden
 app.post('/api/sessions/:sessionId/end', (req, res) => {
   try {
     const session = dialogSessions.get(req.params.sessionId);
@@ -574,7 +768,6 @@ app.post('/api/sessions/:sessionId/end', (req, res) => {
   }
 });
 
-// Session löschen
 app.delete('/api/sessions/:sessionId', (req, res) => {
   try {
     const deleted = dialogSessions.delete(req.params.sessionId);
@@ -601,7 +794,12 @@ server.listen(PORT, () => {
   console.log('📚 Module verfügbar:');
   console.log('   💬 Dialog-Lab: /dialog-lab.html');
   console.log('   📖 Vokabel-Trainer: /vocab-trainer.html');
-  console.log('   🖼️  Bild-Quiz: /image-quiz.html');
+  console.log('   🖼️  Bild-Quiz (Schüler): /student-image-quiz.html');
+  console.log('   👨‍🏫 Bild-Quiz (Lehrer): /teacher-image-quiz.html');
   console.log('   👨‍🏫 Lehrer-Dashboard: /teacher-dashboard.html');
+  console.log('');
+  console.log('🔌 WebSocket Endpunkte:');
+  console.log('   💬 Dialog-Lab: /ws');
+  console.log('   🖼️  Image-Quiz: /image-quiz');
   console.log('🚀 ========================================');
 });
