@@ -663,7 +663,7 @@ app.post('/api/teacher/end-image-quiz', (req, res) => {
 });
 
 // ========================================
-// KORRIGIERTE VERSION - Erkennt mehrere Objekte in einem Satz
+// FINALE VERSION - Erkennt Teile von Objekten (z.B. "apple" in "red apple")
 // ========================================
 app.post('/api/student/check-object', (req, res) => {
   try {
@@ -678,28 +678,37 @@ app.post('/api/student/check-object', (req, res) => {
     }
 
     const studentData = currentImageQuiz.students.get(studentId);
-    const spokenWords = object.toLowerCase().trim().split(' ');
+    // Wir nehmen den ganzen Satz des Schülers, um auch Phrasen wie "cheese wedge" zu erkennen
+    const spokenPhrase = object.toLowerCase().trim();
     
     let newlyFoundObjects = [];
     let pointsThisTurn = 0;
 
-    // Gehe jedes gesprochene Wort durch
-    for (const word of spokenWords) {
-      // Bereinige das Wort (z.B. Plural entfernen)
-      const singularWord = word.replace(/s$/, '');
-
-      // Prüfe, ob das Wort ein korrektes Objekt ist UND ob es noch nicht gefunden wurde
-      const isCorrect = currentImageQuiz.objects.some(obj => obj.replace(/s$/, '') === singularWord);
-      
-      if (isCorrect && !studentData.found.includes(singularWord)) {
-        studentData.found.push(singularWord);
-        newlyFoundObjects.push(singularWord);
+    // Durchsuche die Liste der KORREKTEN Objekte
+    for (const correctObject of currentImageQuiz.objects) {
+      // Prüfe, ob der Schüler dieses Objekt (oder einen Teil davon) genannt hat UND es noch nicht gefunden wurde
+      if (spokenPhrase.includes(correctObject.replace(/s$/, '')) && !studentData.found.includes(correctObject)) {
+        studentData.found.push(correctObject); // Speichere das vollständige, korrekte Objekt
+        newlyFoundObjects.push(correctObject);
         pointsThisTurn += 10;
       }
     }
 
+    // Wenn der Schüler einzelne Wörter sagt, die Teile von Objekten sind
+    const spokenWords = spokenPhrase.split(' ');
+    for (const word of spokenWords) {
+        if (word.length < 3) continue; // Ignoriere sehr kurze Wörter wie 'a', 'an'
+        for (const correctObject of currentImageQuiz.objects) {
+            if (correctObject.includes(word) && !studentData.found.includes(correctObject)) {
+                studentData.found.push(correctObject);
+                newlyFoundObjects.push(correctObject);
+                pointsThisTurn += 10;
+            }
+        }
+    }
+
+
     if (newlyFoundObjects.length > 0) {
-      // Wenn mindestens ein neues Objekt gefunden wurde
       studentData.score += pointsThisTurn;
       
       const message = `Super! Du hast gefunden: ${newlyFoundObjects.join(', ')}!`;
@@ -713,9 +722,7 @@ app.post('/api/student/check-object', (req, res) => {
       });
 
     } else {
-      // Wenn kein neues, korrektes Objekt im Satz war
-      // Prüfen, ob der Fehler daran lag, dass die Objekte bereits genannt wurden
-      const alreadyGuessed = spokenWords.some(word => studentData.found.includes(word.replace(/s$/, '')));
+      const alreadyGuessed = currentImageQuiz.objects.some(obj => spokenPhrase.includes(obj) && studentData.found.includes(obj));
       
       if(alreadyGuessed) {
          return res.json({
@@ -726,10 +733,9 @@ app.post('/api/student/check-object', (req, res) => {
          });
       }
 
-      // Ansonsten war es ein komplett falsches Wort
       return res.json({
         correct: false,
-        message: `"${object}" ist nicht im Bild oder wurde nicht erkannt.`,
+        message: `Leider wurde nichts Passendes in "${object}" gefunden.`,
         totalFound: studentData.found.length,
         alreadyGuessed: false
       });
@@ -834,4 +840,5 @@ server.listen(PORT, () => {
   console.log('   🖼️  Image-Quiz: /image-quiz');
   console.log('🚀 ========================================');
 });
+
 
