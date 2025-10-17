@@ -12,7 +12,7 @@ const path = require('path');
 const fs = require('fs');
 
 // ========================================
-// Express & Server Setup (MODIFIZIERTE, ROBUSTERE VERSION)
+// Express & Server Setup (ROBUSTERE VERSION)
 // ========================================
 const app = express();
 const server = http.createServer(app);
@@ -34,14 +34,10 @@ server.on('upgrade', (request, socket, head) => {
       wssImageQuiz.emit('connection', ws, request);
     });
   } else {
-    // Wenn der Pfad nicht passt, die Verbindung beenden
     socket.destroy();
   }
 });
 
-// ========================================
-// Middleware & Static Files
-// ========================================
 
 // Body Parser Limits
 app.use(express.json({ limit: '50mb' }));
@@ -531,6 +527,23 @@ app.get('/api/quiz-sessions/:sessionId', (req, res) => {
 // ========================================
 // MODUL 4: Lehrer-Bild-Quiz System
 // ========================================
+
+// KORRIGIERTER LOGIN-ENDPUNKT
+app.post('/api/teacher/login', (req, res) => {
+  const { password } = req.body;
+  
+  // Liest das Passwort korrekt aus der Render.com-Umgebung
+  const correctPassword = process.env.TEACHER_PASSWORD;
+
+  if (password && password === correctPassword) {
+    console.log('✅ Lehrer-Login erfolgreich');
+    // Bestätigt nur den Erfolg. Der Client kümmert sich um die Session.
+    res.json({ success: true });
+  } else {
+    console.warn('❌ Fehlgeschlagener Lehrer-Login Versuch');
+    res.status(401).json({ success: false, error: 'Falsches Passwort!' });
+  }
+});
 
 app.post('/api/teacher/upload-image', upload.single('image'), (req, res) => {
   try {
