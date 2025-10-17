@@ -187,6 +187,13 @@
       flex: 1;
       font-weight: 500;
       color: #333;
+      padding: 4px; /* Added for better editing experience */
+      border-radius: 4px; /* Added for better editing experience */
+    }
+
+    .object-name[contenteditable="true"]:focus {
+        background-color: #e0e7ff;
+        outline: 2px solid #667eea;
     }
     
     .status-badge {
@@ -300,16 +307,13 @@
 </head>
 <body>
   <div class="container">
-    <!-- Header -->
     <div class="header">
       <h1>🎨 Lehrer Dashboard - Bild-Quiz</h1>
       <p class="subtitle">Lade ein Bild hoch, analysiere es und starte das Quiz für deine Schüler</p>
     </div>
     
     <div class="grid">
-      <!-- Linke Spalte: Upload & Analyse -->
       <div>
-        <!-- Upload Card -->
         <div class="card">
           <h2>1️⃣ Bild hochladen</h2>
           
@@ -334,7 +338,6 @@
           </div>
         </div>
         
-        <!-- Analyse Card -->
         <div class="card" style="margin-top: 20px;">
           <h2>2️⃣ Bild analysieren</h2>
           <p style="color: #666; margin-bottom: 16px;">GPT-5 Vision erkennt automatisch alle Objekte im Bild</p>
@@ -358,9 +361,7 @@
         </div>
       </div>
       
-      <!-- Rechte Spalte: Objekte & Quiz-Control -->
       <div>
-        <!-- Objekte Card -->
         <div class="card">
           <h2>📋 Erkannte Objekte</h2>
           
@@ -371,11 +372,9 @@
           </div>
           
           <div class="objects-list" id="objects-list" style="display: none;">
-            <!-- Wird dynamisch gefüllt -->
-          </div>
+            </div>
         </div>
         
-        <!-- Quiz Control Card -->
         <div class="card" style="margin-top: 20px;">
           <h2>3️⃣ Quiz starten</h2>
           
@@ -556,20 +555,46 @@
       }
     });
     
-    // Objekte anzeigen
+    // MODIFIZIERTE FUNKTION: Objekte anzeigen (jetzt editierbar)
     function displayObjects(objects) {
       objectsContainer.style.display = 'none';
       objectsList.style.display = 'block';
-      objectsList.innerHTML = '';
-      
+      objectsList.innerHTML = ''; // Liste leeren
+
+      // HINWEIS FÜR LEHRER HINZUFÜGEN
+      const info = document.createElement('p');
+      info.style.cssText = 'color: #666; font-size: 13px; margin-bottom: 12px; background: #f0f4ff; padding: 8px; border-radius: 6px;';
+      info.innerHTML = '💡 <strong>Tipp:</strong> Du kannst auf ein Objekt klicken, um es zu bearbeiten oder zu löschen (indem du den Text entfernst).';
+      objectsList.appendChild(info);
+
       objects.forEach((obj, index) => {
         const item = document.createElement('div');
         item.className = 'object-item';
         item.innerHTML = `
           <div class="object-number">${index + 1}</div>
-          <div class="object-name">${obj}</div>
+          <div class="object-name" contenteditable="true" data-index="${index}">${obj}</div>
         `;
         objectsList.appendChild(item);
+      });
+
+      // Event Listener für die Bearbeitung hinzufügen
+      objectsList.querySelectorAll('.object-name').forEach(nameDiv => {
+        nameDiv.addEventListener('blur', (e) => {
+          const newName = e.target.textContent.trim();
+          const idx = parseInt(e.target.dataset.index, 10);
+          
+          if (newName === '') {
+            // Objekt löschen, wenn der Text entfernt wird
+            detectedObjects.splice(idx, 1);
+            displayObjects(detectedObjects); // Liste neu rendern, um Indizes zu aktualisieren
+          } else {
+            // Objekt umbenennen
+            detectedObjects[idx] = newName.toLowerCase();
+          }
+          console.log('Aktualisierte Objekte:', detectedObjects);
+          // Wichtig: Quiz-Start Button Status aktualisieren
+          startQuizBtn.disabled = detectedObjects.length === 0;
+        });
       });
     }
     
@@ -583,7 +608,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             imageUrl: uploadedImageUrl,
-            objects: detectedObjects
+            objects: detectedObjects // Sendet die (möglicherweise bearbeitete) Objektliste
           })
         });
         
