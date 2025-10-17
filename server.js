@@ -91,7 +91,7 @@ let currentImageQuiz = {
   active: false,
   imageUrl: null,
   objects: [],
-  students: new Map(), // studentId -> { found: [], score: 0 }
+  students: new Map(),
   startTime: null
 };
 
@@ -518,7 +518,6 @@ app.get('/api/quiz-sessions/:sessionId', (req, res) => {
 // MODUL 4: Lehrer-Bild-Quiz System
 // ========================================
 
-// Lehrer: Bild hochladen
 app.post('/api/teacher/upload-image', upload.single('image'), (req, res) => {
   try {
     const imageUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
@@ -532,7 +531,6 @@ app.post('/api/teacher/upload-image', upload.single('image'), (req, res) => {
   }
 });
 
-// Lehrer: Bild analysieren mit GPT Vision
 app.post('/api/teacher/analyze-image', async (req, res) => {
   try {
     const { imageUrl } = req.body;
@@ -572,7 +570,6 @@ app.post('/api/teacher/analyze-image', async (req, res) => {
   }
 });
 
-// Lehrer: Quiz starten
 app.post('/api/teacher/start-image-quiz', (req, res) => {
   try {
     const { imageUrl, objects } = req.body;
@@ -585,7 +582,6 @@ app.post('/api/teacher/start-image-quiz', (req, res) => {
       startTime: Date.now()
     };
 
-    // Broadcast an alle Schüler
     wssImageQuiz.clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(JSON.stringify({
@@ -605,7 +601,6 @@ app.post('/api/teacher/start-image-quiz', (req, res) => {
   }
 });
 
-// Lehrer: Quiz beenden
 app.post('/api/teacher/end-image-quiz', (req, res) => {
   try {
     const duration = Date.now() - currentImageQuiz.startTime;
@@ -615,7 +610,6 @@ app.post('/api/teacher/end-image-quiz', (req, res) => {
       score: data.score
     }));
 
-    // Broadcast an alle Schüler
     wssImageQuiz.clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(JSON.stringify({
@@ -641,7 +635,6 @@ app.post('/api/teacher/end-image-quiz', (req, res) => {
   }
 });
 
-// Schüler: Objekt prüfen
 app.post('/api/student/check-object', (req, res) => {
   try {
     const { studentId, object } = req.body;
@@ -664,7 +657,6 @@ app.post('/api/student/check-object', (req, res) => {
     const studentData = currentImageQuiz.students.get(studentId);
     const objectLower = object.toLowerCase().trim();
 
-    // Prüfe ob bereits gefunden
     if (studentData.found.includes(objectLower)) {
       return res.json({
         correct: false,
@@ -674,7 +666,6 @@ app.post('/api/student/check-object', (req, res) => {
       });
     }
 
-    // Prüfe ob im Bild vorhanden (mit Plural/Singular Toleranz)
     const singularForm = objectLower.replace(/s$/, '');
     const isCorrect = currentImageQuiz.objects.some(obj => {
       const objSingular = obj.replace(/s$/, '');
@@ -708,11 +699,9 @@ app.post('/api/student/check-object', (req, res) => {
   }
 });
 
-// Image Quiz WebSocket (für Schüler)
 wssImageQuiz.on('connection', (ws) => {
   console.log('📡 Image-Quiz Client verbunden');
 
-  // Sende aktuelles Quiz falls aktiv
   if (currentImageQuiz.active) {
     ws.send(JSON.stringify({
       type: 'image_quiz_start',
