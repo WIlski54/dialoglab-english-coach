@@ -222,11 +222,11 @@
         const data = await response.json();
         
         if (data.success) {
-          // Save session
-          localStorage.setItem('teacherSession', data.sessionId);
+          // KORRIGIERT: Speichert den korrekten Schlüssel im sessionStorage
+          sessionStorage.setItem('teacher-authenticated', 'true');
           
-          // Redirect to dashboard
-          window.location.href = '/teacher-dashboard.html';
+          // Leitet zum Bild-Quiz Dashboard weiter (wie von der Logik vorgesehen)
+          window.location.href = '/teacher-image-quiz.html';
         } else {
           showError(data.error || 'Login fehlgeschlagen');
           loginBtn.disabled = false;
@@ -236,7 +236,7 @@
         }
         
       } catch (error) {
-        showError('Verbindungsfehler: ' + error.message);
+        showError('Verbindungsfehler. Der Server hat möglicherweise mit HTML geantwortet.');
         loginBtn.disabled = false;
         loginBtn.textContent = '🚀 Anmelden';
       }
@@ -246,10 +246,10 @@
       errorMsg.textContent = '❌ ' + message;
       errorMsg.classList.add('show');
       
-      // Remove shake class after animation
+      // Remove message after a few seconds
       setTimeout(() => {
         errorMsg.classList.remove('show');
-      }, 3000);
+      }, 4000);
     }
     
     // Enter key support
