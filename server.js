@@ -16,7 +16,12 @@ const fs = require('fs');
 // ========================================
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+
+// WebSocket Server auf /ws Path
+const wss = new WebSocket.Server({ 
+  server,
+  path: '/ws'
+});
 
 // Body Parser Limits
 app.use(express.json({ limit: '50mb' }));
@@ -78,79 +83,139 @@ const quizSessions = [];
 // ========================================
 // MODUL 1: Dialog-Lab WebSocket
 // ========================================
+
+function getScenarioPrompt(scenario, level) {
+  const levelGuides = {
+    A1: 'Use very simple words and short sentences. Speak slowly. Help with basic vocabulary.',
+    A2: 'Use simple everyday language. Keep sentences clear and not too long.',
+    B1: 'Use intermediate vocabulary. You can use more complex sentences, but keep it conversational.'
+  };
+
+  const prompts = {
+    restaurant: `You are a friendly waiter in an English restaurant. Help the student practice ordering food. ${levelGuides[level] || levelGuides.A2} Be encouraging and patient. Speak only English. Keep responses conversational and natural. Correct mistakes gently by rephrasing correctly.`,
+    
+    shopping: `You are a helpful shop assistant in an English store. Help the student practice shopping conversations. ${levelGuides[level] || levelGuides.A2} Be encouraging and patient. Speak only English. Keep responses conversational and natural. Correct mistakes gently by rephrasing correctly.`,
+    
+    airport: `You are a friendly airport staff member. Help the student practice airport conversations like check-in, security, and finding gates. ${levelGuides[level] || levelGuides.A2} Be encouraging and patient. Speak only English. Keep responses conversational and natural. Correct mistakes gently by rephrasing correctly.`,
+    
+    doctor: `You are a caring doctor in an English clinic. Help the student practice describing symptoms and medical conversations. ${levelGuides[level] || levelGuides.A2} Be encouraging and patient. Speak only English. Keep responses conversational and natural. Correct mistakes gently by rephrasing correctly.`,
+    
+    hotel: `You are a friendly hotel receptionist. Help the student practice hotel conversations like check-in, room service, and asking for directions. ${levelGuides[level] || levelGuides.A2} Be encouraging and patient. Speak only English. Keep responses conversational and natural. Correct mistakes gently by rephrasing correctly.`,
+    
+    school: `You are a friendly teacher helping students with school-related conversations. ${levelGuides[level] || levelGuides.A2} Be encouraging and patient. Speak only English. Keep responses conversational and natural.`,
+    
+    shop: `You are a helpful shop assistant. Help the student practice shopping conversations. ${levelGuides[level] || levelGuides.A2} Be encouraging and patient. Speak only English.`,
+    
+    food: `You are a friendly restaurant server helping students order food. ${levelGuides[level] || levelGuides.A2} Be encouraging and patient. Speak only English.`,
+    
+    present: `You are a helpful shop assistant in a gift shop. Help the student practice buying presents. ${levelGuides[level] || levelGuides.A2} Be encouraging and patient. Speak only English.`
+  };
+
+  return prompts[scenario] || prompts.restaurant;
+}
+
 wss.on('connection', (ws) => {
   console.log('📡 Client verbunden');
-  let sessionId = null;
+  
+  let sessionData = {
+    messages: [],
+    scenario: 'restaurant',
+    level: 'A2',
+    sessionId: `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    studentName: 'Student',
+    startTime: new Date(),
+    status: 'active'
+  };
 
   ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message);
+      console.log('📨 Received:', data.type);
 
-      if (data.type === 'start_session') {
-        sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      // Szenario wechseln
+      if (data.type === 'change_scenario') {
+        sessionData.scenario = data.scenario || 'restaurant';
+        sessionData.level = data.level || 'A2';
+        sessionData.messages = []; // Reset conversation
         
-        dialogSessions.set(sessionId, {
-          sessionId,
-          studentName: data.studentName,
-          scenario: data.scenario,
-          messages: [],
-          startTime: new Date(),
-          status: 'active'
+        // Save to sessions map
+        dialogSessions.set(sessionData.sessionId, {
+          ...sessionData,
+          messages: [...sessionData.messages]
         });
-
+        
         ws.send(JSON.stringify({
-          type: 'session_started',
-          sessionId,
-          systemMessage: getScenarioPrompt(data.scenario)
+          type: 'scenario_changed',
+          scenario: sessionData.scenario,
+          level: sessionData.level
         }));
-
-        console.log(`✅ Session gestartet: ${sessionId} für ${data.studentName}`);
+        
+        console.log(`✅ Scenario: ${sessionData.scenario}, Level: ${sessionData.level}`);
       }
 
-      if (data.type === 'user_message' && sessionId) {
-        const session = dialogSessions.get(sessionId);
+      // User Text-Nachricht
+      if (data.type === 'user_text') {
+        const userMessage = data.text;
         
-        session.messages.push({
+        sessionData.messages.push({
           role: 'user',
-          content: data.message
+          content: userMessage
         });
 
+        // AI Response generieren
         const completion = await openai.chat.completions.create({
           model: 'gpt-4o-mini',
           messages: [
             {
               role: 'system',
-              content: getScenarioPrompt(session.scenario)
+              content: getScenarioPrompt(sessionData.scenario, sessionData.level)
             },
-            ...session.messages
+            ...sessionData.messages
           ],
-          temperature: 0.7
+          temperature: 0.7,
+          max_tokens: 200
         });
 
-        const aiResponse = completion.choices[0].message.content;
+        const aiText = completion.choices[0].message.content;
         
-        session.messages.push({
+        sessionData.messages.push({
           role: 'assistant',
-          content: aiResponse
+          content: aiText
+        });
+        
+        // Update session in map
+        dialogSessions.set(sessionData.sessionId, {
+          ...sessionData,
+          messages: [...sessionData.messages]
         });
 
+        // Text-to-Speech generieren
+        let audioBase64 = null;
+        try {
+          const mp3 = await openai.audio.speech.create({
+            model: 'tts-1',
+            voice: 'alloy',
+            input: aiText
+          });
+
+          const buffer = Buffer.from(await mp3.arrayBuffer());
+          audioBase64 = buffer.toString('base64');
+        } catch (audioError) {
+          console.error('TTS Error:', audioError);
+        }
+
+        // Response senden
         ws.send(JSON.stringify({
           type: 'ai_response',
-          message: aiResponse
+          text: aiText,
+          audio: audioBase64
         }));
-      }
 
-      if (data.type === 'end_session' && sessionId) {
-        const session = dialogSessions.get(sessionId);
-        if (session) {
-          session.status = 'finished';
-          session.endTime = new Date();
-        }
-        console.log(`🏁 Session beendet: ${sessionId}`);
+        console.log('✅ AI Response sent with audio');
       }
 
     } catch (error) {
-      console.error('❌ WebSocket Fehler:', error);
+      console.error('❌ WebSocket Error:', error);
       ws.send(JSON.stringify({
         type: 'error',
         message: 'Ein Fehler ist aufgetreten'
@@ -160,24 +225,15 @@ wss.on('connection', (ws) => {
 
   ws.on('close', () => {
     console.log('📡 Client getrennt');
+    if (sessionData) {
+      const session = dialogSessions.get(sessionData.sessionId);
+      if (session) {
+        session.status = 'finished';
+        session.endTime = new Date();
+      }
+    }
   });
 });
-
-function getScenarioPrompt(scenario) {
-  const prompts = {
-    restaurant: `You are a friendly waiter in an English restaurant. Help the student practice ordering food. Be encouraging and patient. Speak only English. Keep responses conversational and natural. Correct mistakes gently by rephrasing correctly.`,
-    
-    shopping: `You are a helpful shop assistant in an English store. Help the student practice shopping conversations. Be encouraging and patient. Speak only English. Keep responses conversational and natural. Correct mistakes gently by rephrasing correctly.`,
-    
-    airport: `You are a friendly airport staff member. Help the student practice airport conversations like check-in, security, and finding gates. Be encouraging and patient. Speak only English. Keep responses conversational and natural. Correct mistakes gently by rephrasing correctly.`,
-    
-    doctor: `You are a caring doctor in an English clinic. Help the student practice describing symptoms and medical conversations. Be encouraging and patient. Speak only English. Keep responses conversational and natural. Correct mistakes gently by rephrasing correctly.`,
-    
-    hotel: `You are a friendly hotel receptionist. Help the student practice hotel conversations like check-in, room service, and asking for directions. Be encouraging and patient. Speak only English. Keep responses conversational and natural. Correct mistakes gently by rephrasing correctly.`
-  };
-
-  return prompts[scenario] || prompts.restaurant;
-}
 
 // ========================================
 // MODUL 2: Vokabel-Trainer API
@@ -238,10 +294,17 @@ app.post('/api/check-pronunciation', async (req, res) => {
     
     const audioBuffer = Buffer.from(audio.split(',')[1], 'base64');
     
+    // Create temporary file for Whisper API
+    const tempFile = path.join(__dirname, 'temp_audio.webm');
+    fs.writeFileSync(tempFile, audioBuffer);
+    
     const transcription = await openai.audio.transcriptions.create({
-      file: await toFile(audioBuffer, 'audio.webm'),
+      file: fs.createReadStream(tempFile),
       model: 'whisper-1'
     });
+    
+    // Clean up temp file
+    fs.unlinkSync(tempFile);
 
     res.json({ 
       transcription: transcription.text,
@@ -252,12 +315,6 @@ app.post('/api/check-pronunciation', async (req, res) => {
     res.status(500).json({ error: 'Aussprachebewertung fehlgeschlagen' });
   }
 });
-
-// Helper für File-Upload
-async function toFile(buffer, filename) {
-  const blob = new Blob([buffer]);
-  return new File([blob], filename);
-}
 
 // Vokabel-Statistik speichern
 app.post('/api/vocab-stats', (req, res) => {
