@@ -27,7 +27,6 @@
       align-items: start;
     }
     
-    /* Coach Bereich - Links */
     .coach-section {
       background: white;
       border-radius: 16px;
@@ -45,7 +44,6 @@
       width: 100%;
       max-width: 300px;
       height: auto;
-      /* Kein border-radius, kein box-shadow - Bild pur! */
     }
     
     .coach-info {
@@ -64,7 +62,6 @@
       line-height: 1.6;
     }
     
-    /* Haupt-Chat-Bereich - Rechts */
     .chat-section {
       background: white;
       border-radius: 16px;
@@ -244,7 +241,6 @@
       gap: 8px;
     }
     
-    /* Responsive Design */
     @media (max-width: 1024px) {
       .main-container {
         grid-template-columns: 1fr;
@@ -281,7 +277,6 @@
       }
     }
     
-    /* Logo am unteren linken Rand */
     .footer-logo {
       position: fixed;
       bottom: 16px;
@@ -308,7 +303,6 @@
 </head>
 <body>
   <div class="main-container">
-    <!-- Coach Bereich - Links -->
     <div class="coach-section">
       <img src="/coach.png" alt="Your English Coach" class="coach-image" id="coach-img">
       <div class="coach-info">
@@ -317,7 +311,6 @@
       </div>
     </div>
     
-    <!-- Chat Bereich - Rechts -->
     <div class="chat-section">
       <div class="header-with-scenario">
         <div class="header-content">
@@ -373,12 +366,10 @@
     </div>
   </div>
 
-  <!-- Logo am unteren linken Rand -->
   <img src="/LogoWK.png" alt="Logo" class="footer-logo">
 
   <script src="./client.js"></script>
   <script>
-    // Voice hint anzeigen wenn connected
     const voiceBtn = document.getElementById('voice-btn');
     const voiceHint = document.getElementById('voice-hint');
     
