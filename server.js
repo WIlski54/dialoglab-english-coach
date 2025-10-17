@@ -151,6 +151,65 @@ wss.on('connection', (ws) => {
         }));
         
         console.log(`✅ Scenario: ${sessionData.scenario}, Level: ${sessionData.level}`);
+        
+        // AUTOMATISCH: KI startet das Gespräch
+        try {
+          const completion = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+              {
+                role: 'system',
+                content: getScenarioPrompt(sessionData.scenario, sessionData.level)
+              },
+              {
+                role: 'user',
+                content: 'Start the conversation by greeting me and asking me a question to begin our roleplay.'
+              }
+            ],
+            temperature: 0.7,
+            max_tokens: 150
+          });
+
+          const aiText = completion.choices[0].message.content;
+          
+          sessionData.messages.push({
+            role: 'assistant',
+            content: aiText
+          });
+          
+          // Update session
+          dialogSessions.set(sessionData.sessionId, {
+            ...sessionData,
+            messages: [...sessionData.messages]
+          });
+
+          // Text-to-Speech generieren
+          let audioBase64 = null;
+          try {
+            const mp3 = await openai.audio.speech.create({
+              model: 'tts-1',
+              voice: 'alloy',
+              input: aiText
+            });
+
+            const buffer = Buffer.from(await mp3.arrayBuffer());
+            audioBase64 = buffer.toString('base64');
+          } catch (audioError) {
+            console.error('TTS Error:', audioError);
+          }
+
+          // Automatische Begrüßung senden
+          ws.send(JSON.stringify({
+            type: 'ai_response',
+            text: aiText,
+            audio: audioBase64
+          }));
+
+          console.log('✅ AI started conversation automatically');
+          
+        } catch (error) {
+          console.error('Auto-start error:', error);
+        }
       }
 
       // User Text-Nachricht
