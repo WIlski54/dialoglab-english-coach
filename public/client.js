@@ -5,22 +5,17 @@ const connectBtn = document.getElementById('connect');
 const sendBtn = document.getElementById('send');
 const voiceBtn = document.getElementById('voice-btn');
 
-// Speech Recognition Setup
 let recognition = null;
 let isRecording = false;
-
-// Audio Context für iOS - ZENTRAL für alle Audio-Operationen
 let audioContext = null;
 let audioUnlocked = false;
 
-// Audio Context entsperren mit Test-Sound
 async function unlockAudioWithSound() {
   if (audioUnlocked) return true;
   
   try {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
     
-    // Test-Sound erzeugen (sehr kurz und leise)
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
     
@@ -28,12 +23,11 @@ async function unlockAudioWithSound() {
     gainNode.connect(audioContext.destination);
     
     oscillator.frequency.value = 440;
-    gainNode.gain.value = 0.01; // Sehr leise
+    gainNode.gain.value = 0.01;
     
     oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.03); // 30ms
+    oscillator.stop(audioContext.currentTime + 0.03);
     
-    // Warten bis Sound abgespielt wurde
     await new Promise(resolve => setTimeout(resolve, 50));
     
     audioUnlocked = true;
@@ -45,24 +39,20 @@ async function unlockAudioWithSound() {
   }
 }
 
-// 🔧 NEUE FUNKTION: Audio über Web Audio API abspielen
 async function playAudioViaWebAudioAPI(base64Audio) {
   try {
     if (!audioContext) {
       throw new Error('AudioContext not initialized');
     }
 
-    // Base64 -> Binary -> ArrayBuffer
     const binaryString = atob(base64Audio);
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
       bytes[i] = binaryString.charCodeAt(i);
     }
     
-    // ArrayBuffer dekodieren
     const audioBuffer = await audioContext.decodeAudioData(bytes.buffer);
     
-    // BufferSource erstellen und abspielen
     const source = audioContext.createBufferSource();
     source.buffer = audioBuffer;
     source.connect(audioContext.destination);
@@ -70,7 +60,6 @@ async function playAudioViaWebAudioAPI(base64Audio) {
     
     console.log('🔊 Playing audio via Web Audio API');
     
-    // Promise zurückgeben für sequentielle Wiedergabe
     return new Promise((resolve) => {
       source.onended = () => {
         console.log('✅ Audio playback finished');
@@ -84,23 +73,19 @@ async function playAudioViaWebAudioAPI(base64Audio) {
   }
 }
 
-// Haupt-Abspielfunktion mit Fallback
 async function playAudio(base64Audio, retryCount = 0) {
   try {
-    // PRIMÄR: Web Audio API verwenden
     await playAudioViaWebAudioAPI(base64Audio);
     
   } catch (primaryError) {
     console.error('Primary playback failed:', primaryError);
     
-    // FALLBACK 1: Retry einmal
     if (retryCount < 1) {
       console.log('🔄 Retrying with Web Audio API...');
       await new Promise(resolve => setTimeout(resolve, 300));
       return playAudio(base64Audio, retryCount + 1);
     }
     
-    // FALLBACK 2: Klassisches Audio-Element als letzte Option
     console.log('⚠️ Falling back to Audio element');
     try {
       const binaryString = atob(base64Audio);
@@ -121,13 +106,11 @@ async function playAudio(base64Audio, retryCount = 0) {
       
     } catch (fallbackError) {
       console.error('Fallback also failed:', fallbackError);
-      // FALLBACK 3: Manueller Button
       showManualPlayButton(base64Audio);
     }
   }
 }
 
-// Manueller Play-Button als letzter Fallback
 function showManualPlayButton(base64Audio) {
   const existing = document.getElementById('manual-play-btn');
   if (existing) existing.remove();
@@ -165,7 +148,6 @@ function showManualPlayButton(base64Audio) {
   
   document.body.appendChild(playBtn);
   
-  // Auto-remove nach 15 Sekunden
   setTimeout(() => {
     if (playBtn.parentNode) playBtn.remove();
   }, 15000);
@@ -236,7 +218,6 @@ function add(role, text) {
   chat.scrollTop = chat.scrollHeight;
 }
 
-// Voice Button
 if (voiceBtn) {
   voiceBtn.onclick = () => {
     if (!recognition) {
@@ -263,7 +244,6 @@ if (voiceBtn) {
 }
 
 connectBtn.onclick = async () => {
-  // Disconnect-Funktion
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.close();
     chat.innerHTML = '';
@@ -284,7 +264,6 @@ connectBtn.onclick = async () => {
     return;
   }
 
-  // Connect-Funktion
   const scenario = document.getElementById('scenario').value;
   const level = document.getElementById('level').value;
 
@@ -296,7 +275,6 @@ connectBtn.onclick = async () => {
   
   add('ai', '🔌 Connecting to server...');
   
-  // Audio mit Test-Sound entsperren (iOS-kritisch!)
   add('ai', '🔊 Initializing audio system... (you may hear a brief tone)');
   const audioReady = await unlockAudioWithSound();
   
@@ -318,7 +296,6 @@ connectBtn.onclick = async () => {
     
     add('ai', '✅ Connected! Starting conversation with AI voice coach...');
     
-    // GEÄNDERT: Sende change_scenario statt client.init
     ws.send(JSON.stringify({
       type: 'change_scenario',
       scenario: scenario,
@@ -356,7 +333,6 @@ connectBtn.onclick = async () => {
       const msg = JSON.parse(payload);
       console.log('📨 Received:', msg.type);
 
-      // GEÄNDERT: Reagiere auf ai_response statt server.response
       if (msg.type === 'ai_response') {
         const loader = document.getElementById('loading-indicator');
         if (loader) loader.remove();
@@ -365,7 +341,6 @@ connectBtn.onclick = async () => {
           add('ai', msg.text);
         }
         
-        // Audio über Web Audio API abspielen
         if (msg.audio) {
           await playAudio(msg.audio);
         }
@@ -380,7 +355,6 @@ connectBtn.onclick = async () => {
         return;
       }
       
-      // HINZUGEFÜGT: Scenario changed Bestätigung
       if (msg.type === 'scenario_changed') {
         add('ai', `✅ Scenario changed to: ${msg.scenario} (${msg.level})`);
         return;
@@ -438,7 +412,6 @@ sendBtn.onclick = () => {
   chat.appendChild(loadingDiv);
   chat.scrollTop = chat.scrollHeight;
 
-  // GEÄNDERT: Sende user_text statt client.text
   ws.send(JSON.stringify({
     type: 'user_text',
     text: val
@@ -455,7 +428,6 @@ txt.addEventListener('keypress', (e) => {
   }
 });
 
-// Initial: Buttons deaktiviert
 sendBtn.disabled = true;
 txt.disabled = true;
 if (voiceBtn) {
@@ -463,7 +435,6 @@ if (voiceBtn) {
   voiceBtn.style.display = 'none';
 }
 
-// Szenario-Bild dynamisch wechseln
 const scenarioSelect = document.getElementById('scenario');
 const scenarioImg = document.getElementById('scenario-img');
 
