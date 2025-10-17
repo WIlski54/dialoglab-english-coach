@@ -1,807 +1,971 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Lehrer-Dashboard - DialogLab</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lehrer-Dashboard | DialogLab</title>
   <style>
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
     }
-    
+
     body {
-      font-family: system-ui, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       min-height: 100vh;
       padding: 20px;
     }
-    
+
     .container {
       max-width: 1400px;
       margin: 0 auto;
     }
-    
-    /* Header */
+
     .header {
       background: white;
+      padding: 24px 32px;
       border-radius: 16px;
-      padding: 24px;
-      margin-bottom: 20px;
       box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      margin-bottom: 24px;
     }
-    
-    h1 {
-      color: #333;
+
+    .header h1 {
       font-size: 28px;
-      margin-bottom: 4px;
+      color: #1a202c;
+      margin-bottom: 8px;
     }
-    
-    .subtitle {
-      color: #666;
-      font-size: 14px;
+
+    .header p {
+      color: #718096;
+      font-size: 15px;
     }
-    
-    .logout-btn {
-      padding: 10px 20px;
-      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: transform 0.2s;
-    }
-    
-    .logout-btn:hover {
-      transform: scale(1.05);
-    }
-    
-    /* Tabs */
+
     .tabs {
-      background: white;
-      border-radius: 16px;
-      padding: 8px;
-      margin-bottom: 20px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
       display: flex;
       gap: 8px;
+      margin-bottom: 24px;
+      background: rgba(255,255,255,0.2);
+      padding: 8px;
+      border-radius: 12px;
+      backdrop-filter: blur(10px);
     }
-    
+
     .tab {
       flex: 1;
-      padding: 16px;
+      padding: 12px 24px;
       background: transparent;
       border: none;
-      border-radius: 12px;
-      font-size: 16px;
+      border-radius: 8px;
+      color: white;
+      font-size: 15px;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.3s;
-      color: #666;
     }
-    
+
     .tab:hover {
-      background: #f3f4f6;
+      background: rgba(255,255,255,0.15);
     }
-    
+
     .tab.active {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-    }
-    
-    /* Content */
-    .content {
       background: white;
-      border-radius: 16px;
-      padding: 32px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-      min-height: 500px;
+      color: #667eea;
     }
-    
+
     .tab-content {
       display: none;
+      background: white;
+      padding: 32px;
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
     }
-    
+
     .tab-content.active {
       display: block;
     }
-    
-    /* Dialog-Lab Tab */
-    .status-indicator {
-      display: inline-block;
-      padding: 6px 12px;
-      background: #d1fae5;
-      color: #059669;
+
+    .session-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+      gap: 20px;
+      margin-top: 24px;
+    }
+
+    .session-card {
+      background: #f7fafc;
+      border: 2px solid #e2e8f0;
       border-radius: 12px;
+      padding: 20px;
+      transition: all 0.3s;
+    }
+
+    .session-card:hover {
+      border-color: #667eea;
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+    }
+
+    .session-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 16px;
+    }
+
+    .session-name {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1a202c;
+    }
+
+    .session-status {
+      padding: 4px 12px;
+      border-radius: 20px;
       font-size: 12px;
       font-weight: 600;
-      margin-left: 12px;
     }
-    
-    table {
-      border-collapse: collapse;
-      width: 100%;
-      margin-top: 16px;
+
+    .status-active {
+      background: #d4edda;
+      color: #155724;
     }
-    
-    th, td {
-      border: 1px solid #e5e7eb;
+
+    .status-finished {
+      background: #e2e8f0;
+      color: #4a5568;
+    }
+
+    .session-info {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 16px;
+      font-size: 14px;
+      color: #4a5568;
+    }
+
+    .info-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .messages-list {
+      max-height: 200px;
+      overflow-y: auto;
+      margin-bottom: 16px;
       padding: 12px;
-      text-align: left;
+      background: white;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
     }
-    
-    th {
-      background: #f9fafb;
-      font-weight: 600;
-      color: #374151;
+
+    .message-item {
+      padding: 8px 0;
+      border-bottom: 1px solid #f0f0f0;
       font-size: 13px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
     }
-    
-    tbody tr:hover {
-      background: #f9fafb;
+
+    .message-item:last-child {
+      border-bottom: none;
     }
-    
+
+    .message-role {
+      font-weight: 600;
+      color: #667eea;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .btn-primary {
+      background: #667eea;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #5568d3;
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: #e2e8f0;
+      color: #4a5568;
+    }
+
+    .btn-secondary:hover {
+      background: #cbd5e0;
+    }
+
+    .btn-danger {
+      background: #fc8181;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #f56565;
+    }
+
+    .session-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
     .empty-state {
       text-align: center;
       padding: 60px 20px;
-      color: #6b7280;
+      color: #718096;
     }
-    
-    /* Vocab Tab */
-    .info-box {
-      background: #eff6ff;
-      border-left: 4px solid #3b82f6;
-      padding: 20px;
-      border-radius: 8px;
-      margin-top: 20px;
+
+    .empty-state-icon {
+      font-size: 64px;
+      margin-bottom: 16px;
     }
-    
-    .info-box h3 {
-      color: #1e40af;
-      margin-bottom: 8px;
-    }
-    
-    /* Quiz Tab */
-    .quiz-section {
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
       margin-bottom: 32px;
     }
-    
-    .quiz-section h2 {
-      color: #333;
-      margin-bottom: 16px;
-      font-size: 20px;
-    }
-    
-    .upload-area {
-      border: 3px dashed #cbd5e1;
-      border-radius: 12px;
-      padding: 40px;
-      text-align: center;
-      transition: all 0.3s;
-      cursor: pointer;
-    }
-    
-    .upload-area:hover {
-      border-color: #667eea;
-      background: #f8f9ff;
-    }
-    
-    .upload-area.dragover {
-      border-color: #667eea;
-      background: #eff6ff;
-    }
-    
-    input[type="file"] {
-      display: none;
-    }
-    
-    .btn {
-      padding: 12px 24px;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s;
-      margin-right: 8px;
-    }
-    
-    .btn-primary {
+
+    .stat-card {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
-    }
-    
-    .btn-success {
-      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-      color: white;
-    }
-    
-    .btn-danger {
-      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-      color: white;
-    }
-    
-    .btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-    
-    .btn:hover:not(:disabled) {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-    }
-    
-    .preview-image {
-      max-width: 100%;
-      max-height: 400px;
+      padding: 24px;
       border-radius: 12px;
-      margin-top: 16px;
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
     }
-    
-    .success-msg {
-      background: #d1fae5;
-      color: #047857;
-      padding: 12px;
-      border-radius: 8px;
-      margin-top: 12px;
+
+    .stat-value {
+      font-size: 36px;
+      font-weight: 700;
+      margin-bottom: 8px;
     }
-    
-    .error-msg {
-      background: #fee2e2;
-      color: #dc2626;
-      padding: 12px;
-      border-radius: 8px;
-      margin-top: 12px;
-    }
-    
-    .objects-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-      gap: 8px;
-      margin-top: 16px;
-    }
-    
-    .object-badge {
-      padding: 8px;
-      background: #f3f4f6;
-      border-radius: 6px;
-      text-align: center;
+
+    .stat-label {
       font-size: 14px;
-      font-weight: 500;
+      opacity: 0.9;
     }
-    
-    .quiz-status {
-      background: #fef3c7;
-      border-left: 4px solid #f59e0b;
+
+    .info-box {
+      background: #edf2f7;
+      border-left: 4px solid #667eea;
+      padding: 16px 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+
+    .info-box h3 {
+      font-size: 16px;
+      margin-bottom: 8px;
+      color: #2d3748;
+    }
+
+    .info-box p {
+      color: #4a5568;
+      line-height: 1.6;
+      font-size: 14px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    th {
+      background: #f7fafc;
+      font-weight: 600;
+      color: #2d3748;
+      font-size: 14px;
+    }
+
+    td {
+      color: #4a5568;
+      font-size: 14px;
+    }
+
+    tr:hover {
+      background: #f7fafc;
+    }
+
+    .difficulty-high {
+      color: #e53e3e;
+      font-weight: 600;
+    }
+
+    .difficulty-medium {
+      color: #ed8936;
+      font-weight: 600;
+    }
+
+    .difficulty-low {
+      color: #48bb78;
+      font-weight: 600;
+    }
+
+    .quiz-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 20px;
+      margin-top: 24px;
+    }
+
+    .quiz-card {
+      background: #f7fafc;
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 20px;
+      transition: all 0.3s;
+    }
+
+    .quiz-card:hover {
+      border-color: #667eea;
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+    }
+
+    .quiz-image {
+      width: 100%;
+      height: 200px;
+      object-fit: cover;
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
+
+    .quiz-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1a202c;
+      margin-bottom: 12px;
+    }
+
+    .quiz-info {
+      font-size: 14px;
+      color: #718096;
+      margin-bottom: 16px;
+    }
+
+    .quiz-stats {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .quiz-stat {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 8px 16px;
+      background: white;
+      border-radius: 8px;
+    }
+
+    .quiz-stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: #667eea;
+    }
+
+    .quiz-stat-label {
+      font-size: 12px;
+      color: #718096;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: white;
+      padding: 32px;
+      border-radius: 16px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .modal-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #1a202c;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 28px;
+      cursor: pointer;
+      color: #718096;
+      padding: 0;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-close:hover {
+      color: #1a202c;
+    }
+
+    .message-full {
+      background: #f7fafc;
       padding: 16px;
       border-radius: 8px;
-      margin-top: 16px;
+      margin-bottom: 16px;
+      border-left: 4px solid #667eea;
     }
-    
-    .quiz-status.active {
-      background: #d1fae5;
-      border-color: #10b981;
+
+    .message-full-role {
+      font-weight: 600;
+      color: #667eea;
+      margin-bottom: 8px;
+    }
+
+    .message-full-content {
+      color: #2d3748;
+      line-height: 1.6;
+      white-space: pre-wrap;
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <!-- Header -->
     <div class="header">
-      <div>
-        <h1>🎓 Lehrer-Dashboard</h1>
-        <p class="subtitle">Zentrale Steuerung für alle Module</p>
-      </div>
-      <button class="logout-btn" onclick="logout()">🚪 Abmelden</button>
+      <h1>👨‍🏫 Lehrer-Dashboard</h1>
+      <p>Überwache und verwalte alle Lernmodule</p>
     </div>
-    
-    <!-- Tabs -->
+
     <div class="tabs">
-      <button class="tab active" onclick="switchTab('dialog-lab')">
-        💬 Dialog-Lab
-      </button>
-      <button class="tab" onclick="switchTab('vocab')">
-        📚 Vokabel-Trainer
-      </button>
-      <button class="tab" onclick="switchTab('quiz')">
-        🖼️ Bild-Quiz
-      </button>
+      <button class="tab active" data-tab="dialog">💬 Dialog-Lab</button>
+      <button class="tab" data-tab="vocab">📚 Vokabel-Trainer</button>
+      <button class="tab" data-tab="quiz">🖼️ Bild-Quiz</button>
     </div>
-    
-    <!-- Content -->
-    <div class="content">
-      <!-- Dialog-Lab Tab -->
-      <div id="dialog-lab" class="tab-content active">
-        <h2>
-          Dialog-Lab Monitoring
-          <span class="status-indicator" id="dialog-status">● Verbunden</span>
-        </h2>
-        <p style="color: #666; margin-bottom: 20px;">
-          Echtzeit-Überwachung aller aktiven Schüler-Sessions
+
+    <!-- Dialog-Lab Tab -->
+    <div id="dialog" class="tab-content active">
+      <h2>💬 Dialog-Lab Sessions</h2>
+      <p style="color: #666; margin-bottom: 20px;">
+        Aktive und abgeschlossene Dialog-Sessions der Schüler
+      </p>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="total-sessions">0</div>
+          <div class="stat-label">Gesamt Sessions</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="active-sessions">0</div>
+          <div class="stat-label">Aktive Sessions</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="finished-sessions">0</div>
+          <div class="stat-label">Abgeschlossen</div>
+        </div>
+      </div>
+
+      <div class="session-grid" id="sessions-container">
+        <div class="empty-state">
+          <div class="empty-state-icon">📭</div>
+          <h3>Keine Sessions vorhanden</h3>
+          <p>Sessions erscheinen hier, sobald Schüler das Dialog-Lab nutzen</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Vokabel-Trainer Tab -->
+    <div id="vocab" class="tab-content">
+      <h2>📚 Vokabel-Trainer Statistiken</h2>
+      <p style="color: #666; margin-bottom: 20px;">
+        Übersicht über Vokabel-Schwierigkeiten und Lernfortschritt
+      </p>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="vocab-total-attempts">0</div>
+          <div class="stat-label">Gesamt Versuche</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="vocab-total-errors">0</div>
+          <div class="stat-label">Fehler</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="vocab-success-rate">0%</div>
+          <div class="stat-label">Erfolgsquote</div>
+        </div>
+      </div>
+
+      <div class="info-box">
+        <h3>ℹ️ Über die Vokabel-Statistiken</h3>
+        <p>
+          Diese Tabelle zeigt die 20 schwierigsten Vokabeln basierend auf Fehlerquote und Häufigkeit.
+          Nutzen Sie diese Informationen, um gezielt auf problematische Vokabeln einzugehen.
         </p>
-        
-        <table id="sessions-table">
+      </div>
+
+      <div style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+        <h3 style="margin-bottom: 16px;">🎯 Top 20 Schwierigste Vokabeln</h3>
+        <table id="difficulty-table">
           <thead>
             <tr>
-              <th style="width: 120px;">Session-ID</th>
-              <th style="width: 120px;">Szenario</th>
-              <th style="width: 80px;">Level</th>
-              <th>Letzter Schüler-Satz</th>
-              <th style="width: 150px;">Vokabel-Treffer</th>
-              <th style="width: 120px;">Fehler</th>
+              <th style="width: 50px;">#</th>
+              <th>Englisch</th>
+              <th>Deutsch</th>
+              <th>Versuche</th>
+              <th>Fehler</th>
+              <th>Erfolgsquote</th>
             </tr>
           </thead>
           <tbody>
             <tr>
               <td colspan="6" class="empty-state">
                 <div style="font-size: 48px; margin-bottom: 12px;">📊</div>
-                <div><strong>Keine aktiven Sessions</strong></div>
+                <div><strong>Noch keine Daten</strong></div>
                 <div style="font-size: 13px; margin-top: 8px;">
-                  Schüler müssen sich zuerst mit Dialog-Lab verbinden
+                  Statistiken werden nach ersten Versuchen angezeigt
                 </div>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
-      
-      <!-- Vokabel-Trainer Tab -->
-      <div id="vocab" class="tab-content">
-        <h2>📚 Vokabel-Trainer</h2>
-        <p style="color: #666; margin-bottom: 20px;">
-          Informationen zum Vokabel-Modul
-        </p>
-        
-        <div class="info-box">
-          <h3>ℹ️ Vokabel-Trainer ist selbstständig</h3>
-          <p>
-            Das Vokabel-Trainer-Modul ist für Schüler frei zugänglich und benötigt kein Lehrer-Monitoring.
-            Schüler können eigenständig üben und erhalten automatisches Feedback von der KI.
-          </p>
+
+      <div style="margin-top: 32px; text-align: center;">
+        <a href="/vocab-trainer.html" target="_blank" class="btn btn-primary">
+          🎯 Vokabel-Trainer öffnen
+        </a>
+      </div>
+    </div>
+
+    <!-- Bild-Quiz Tab -->
+    <div id="quiz" class="tab-content">
+      <h2>🖼️ Bild-Quiz Aktivitäten</h2>
+      <p style="color: #666; margin-bottom: 20px;">
+        Übersicht aller durchgeführten Bild-Quiz Sessions
+      </p>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="quiz-total-sessions">0</div>
+          <div class="stat-label">Gesamt Sessions</div>
         </div>
-        
-        <div class="info-box" style="margin-top: 16px; background: #f0fdf4; border-color: #22c55e;">
-          <h3>✨ Features:</h3>
-          <ul style="margin-left: 20px; margin-top: 8px; line-height: 2;">
-            <li>Sprachausgabe für jedes Vokabel</li>
-            <li>KI-generierte Tipps bei Schwierigkeiten</li>
-            <li>Automatische Bewertung der Aussprache</li>
-            <li>Punkte- und Streak-System</li>
-          </ul>
+        <div class="stat-card">
+          <div class="stat-value" id="quiz-total-questions">0</div>
+          <div class="stat-label">Fragen gestellt</div>
         </div>
-        
-        <div style="margin-top: 32px; text-align: center;">
-          <a href="/vocab-trainer.html" target="_blank" class="btn btn-primary">
-            🎯 Vokabel-Trainer öffnen
-          </a>
+        <div class="stat-card">
+          <div class="stat-value" id="quiz-avg-confidence">0%</div>
+          <div class="stat-label">Ø Konfidenz</div>
         </div>
       </div>
-      
-      <!-- Bild-Quiz Tab -->
-      <div id="quiz" class="tab-content">
-        <h2>🖼️ Bild-Quiz Management</h2>
-        <p style="color: #666; margin-bottom: 24px;">
-          Lade ein Bild hoch, analysiere es mit GPT-5 Vision und starte das Quiz
+
+      <div class="info-box">
+        <h3>ℹ️ Über das Bild-Quiz</h3>
+        <p>
+          Im Bild-Quiz können Schüler Bilder hochladen und Fragen dazu stellen.
+          Die KI analysiert das Bild und beantwortet Fragen auf Englisch.
         </p>
-        
-        <!-- Upload Section -->
-        <div class="quiz-section">
-          <h2>📤 1. Bild hochladen</h2>
-          <div class="upload-area" id="upload-area" onclick="document.getElementById('file-input').click()">
-            <div style="font-size: 64px; margin-bottom: 12px;">📁</div>
-            <p style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">
-              Klicke hier oder ziehe ein Bild hierher
-            </p>
-            <p style="font-size: 14px; color: #999;">
-              JPG, PNG, GIF oder WebP (max. 10MB)
-            </p>
-          </div>
-          <input type="file" id="file-input" accept="image/*">
-          
-          <div id="upload-preview" style="display: none; margin-top: 16px;">
-            <img id="preview-img" class="preview-image">
-            <div id="upload-feedback"></div>
-          </div>
-        </div>
-        
-        <!-- Analysis Section -->
-        <div class="quiz-section">
-          <h2>🔍 2. Bild analysieren</h2>
-          <p style="color: #666; margin-bottom: 12px;">
-            GPT-5 Vision erkennt automatisch alle Objekte im Bild
-          </p>
-          <button class="btn btn-primary" id="analyze-btn" disabled onclick="analyzeImage()">
-            🔬 Mit GPT-5 Vision analysieren
-          </button>
-          
-          <div id="analysis-feedback"></div>
-          
-          <div id="objects-container" style="display: none;">
-            <h3 style="margin-top: 24px; margin-bottom: 12px;">
-              Erkannte Objekte (<span id="object-count">0</span>):
-            </h3>
-            <div class="objects-grid" id="objects-grid"></div>
-          </div>
-        </div>
-        
-        <!-- Quiz Control Section -->
-        <div class="quiz-section">
-          <h2>🎯 3. Quiz steuern</h2>
-          <button class="btn btn-success" id="start-quiz-btn" disabled onclick="startQuiz()">
-            🚀 Quiz an Schüler übertragen
-          </button>
-          <button class="btn btn-danger" id="end-quiz-btn" disabled onclick="endQuiz()">
-            🛑 Quiz beenden
-          </button>
-          
-          <div id="quiz-status-box"></div>
+      </div>
+
+      <div class="quiz-grid" id="quiz-container">
+        <div class="empty-state">
+          <div class="empty-state-icon">🖼️</div>
+          <h3>Keine Quiz-Sessions vorhanden</h3>
+          <p>Sessions erscheinen hier, sobald Schüler das Bild-Quiz nutzen</p>
         </div>
       </div>
     </div>
   </div>
-  
+
+  <!-- Modal für Session Details -->
+  <div class="modal" id="session-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">Session Details</h2>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div id="modal-body">
+        <!-- Wird dynamisch gefüllt -->
+      </div>
+    </div>
+  </div>
+
   <script>
-    // ===========================
-    // Global State
-    // ===========================
-    let currentTab = 'dialog-lab';
-    let dialogWs = null;
-    let uploadedImageUrl = null;
-    let detectedObjects = [];
-    
-    // ===========================
     // Tab Switching
-    // ===========================
-    function switchTab(tabName) {
-      currentTab = tabName;
-      
-      // Update tab buttons
-      document.querySelectorAll('.tab').forEach(tab => {
-        tab.classList.remove('active');
-      });
-      event.target.classList.add('active');
-      
-      // Update content
-      document.querySelectorAll('.tab-content').forEach(content => {
-        content.classList.remove('active');
-      });
-      document.getElementById(tabName).classList.add('active');
-      
-      // Initialize tab if needed
-      if (tabName === 'dialog-lab' && !dialogWs) {
-        connectDialogLab();
-      }
-    }
-    
-    // ===========================
-    // Dialog-Lab WebSocket
-    // ===========================
-    function connectDialogLab() {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/teacher`;
-      
-      console.log('🔌 Connecting to Dialog-Lab WebSocket:', wsUrl);
-      
-      dialogWs = new WebSocket(wsUrl);
-      
-      dialogWs.onopen = () => {
-        console.log('✅ Dialog-Lab WebSocket connected');
-        document.getElementById('dialog-status').textContent = '● Verbunden';
-        document.getElementById('dialog-status').style.background = '#d1fae5';
-        document.getElementById('dialog-status').style.color = '#059669';
-      };
-      
-      dialogWs.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        console.log('📨 Dialog-Lab update:', data);
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const tabName = tab.dataset.tab;
         
-        if (data.type === 'sessions_snapshot') {
-          updateSessionsTable(data.sessions);
-        } else if (data.type === 'session_update') {
-          updateSessionRow(data.sessionId, data.data);
-        } else if (data.type === 'session_ended') {
-          removeSessionRow(data.sessionId);
+        // Update tabs
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        
+        // Update content
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.getElementById(tabName).classList.add('active');
+      });
+    });
+
+    // Load Dialog-Lab Sessions
+    async function loadSessions() {
+      try {
+        const response = await fetch('/api/sessions');
+        const sessions = await response.json();
+        
+        // Update stats
+        document.getElementById('total-sessions').textContent = sessions.length;
+        document.getElementById('active-sessions').textContent = 
+          sessions.filter(s => s.status === 'active').length;
+        document.getElementById('finished-sessions').textContent = 
+          sessions.filter(s => s.status === 'finished').length;
+        
+        // Render sessions
+        const container = document.getElementById('sessions-container');
+        if (sessions.length === 0) {
+          container.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-icon">📭</div>
+              <h3>Keine Sessions vorhanden</h3>
+              <p>Sessions erscheinen hier, sobald Schüler das Dialog-Lab nutzen</p>
+            </div>
+          `;
+          return;
         }
-      };
-      
-      dialogWs.onclose = () => {
-        console.log('🔌 Dialog-Lab WebSocket disconnected');
-        document.getElementById('dialog-status').textContent = '● Getrennt';
-        document.getElementById('dialog-status').style.background = '#fee2e2';
-        document.getElementById('dialog-status').style.color = '#dc2626';
         
-        // Reconnect after 3 seconds
-        setTimeout(connectDialogLab, 3000);
-      };
-    }
-    
-    function updateSessionsTable(sessions) {
-      const tbody = document.querySelector('#sessions-table tbody');
-      
-      if (sessions.length === 0) {
-        tbody.innerHTML = `
-          <tr>
-            <td colspan="6" class="empty-state">
-              <div style="font-size: 48px; margin-bottom: 12px;">📊</div>
-              <div><strong>Keine aktiven Sessions</strong></div>
-              <div style="font-size: 13px; margin-top: 8px;">
-                Schüler müssen sich zuerst mit Dialog-Lab verbinden
+        container.innerHTML = sessions.map(session => `
+          <div class="session-card">
+            <div class="session-header">
+              <div class="session-name">${session.studentName}</div>
+              <span class="session-status status-${session.status}">
+                ${session.status === 'active' ? '🟢 Aktiv' : '⚪ Beendet'}
+              </span>
+            </div>
+            <div class="session-info">
+              <div class="info-row">
+                <span>🎭 Szenario:</span>
+                <strong>${session.scenario}</strong>
               </div>
-            </td>
-          </tr>
-        `;
-        return;
-      }
-      
-      tbody.innerHTML = sessions.map(s => `
-        <tr data-session-id="${s.id}">
-          <td>${s.id.substring(0, 8)}</td>
-          <td>${s.scenario}</td>
-          <td>${s.level}</td>
-          <td>${s.lastText || '-'}</td>
-          <td>${s.vocabHits ? s.vocabHits.join(', ') : '-'}</td>
-          <td>${s.errors ? s.errors.join(', ') : '-'}</td>
-        </tr>
-      `).join('');
-    }
-    
-    function updateSessionRow(sessionId, data) {
-      const row = document.querySelector(`tr[data-session-id="${sessionId}"]`);
-      if (row) {
-        const cells = row.cells;
-        cells[1].textContent = data.scenario;
-        cells[2].textContent = data.level;
-        cells[3].textContent = data.lastText || '-';
-        cells[4].textContent = data.vocabHits ? data.vocabHits.join(', ') : '-';
-        cells[5].textContent = data.errors ? data.errors.join(', ') : '-';
-      }
-    }
-    
-    function removeSessionRow(sessionId) {
-      const row = document.querySelector(`tr[data-session-id="${sessionId}"]`);
-      if (row) row.remove();
-      
-      // Show empty state if no rows left
-      const tbody = document.querySelector('#sessions-table tbody');
-      if (tbody.children.length === 0) {
-        updateSessionsTable([]);
-      }
-    }
-    
-    // ===========================
-    // Bild-Quiz Functions
-    // ===========================
-    
-    // File Upload
-    const fileInput = document.getElementById('file-input');
-    const uploadArea = document.getElementById('upload-area');
-    const previewContainer = document.getElementById('upload-preview');
-    const previewImg = document.getElementById('preview-img');
-    const uploadFeedback = document.getElementById('upload-feedback');
-    const analyzeBtn = document.getElementById('analyze-btn');
-    
-    fileInput.addEventListener('change', handleFileSelect);
-    
-    // Drag & Drop
-    uploadArea.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      uploadArea.classList.add('dragover');
-    });
-    
-    uploadArea.addEventListener('dragleave', () => {
-      uploadArea.classList.remove('dragover');
-    });
-    
-    uploadArea.addEventListener('drop', (e) => {
-      e.preventDefault();
-      uploadArea.classList.remove('dragover');
-      
-      const files = e.dataTransfer.files;
-      if (files.length > 0) {
-        fileInput.files = files;
-        handleFileSelect();
-      }
-    });
-    
-    async function handleFileSelect() {
-      const file = fileInput.files[0];
-      if (!file) return;
-      
-      // Show preview
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        previewImg.src = e.target.result;
-        previewContainer.style.display = 'block';
-      };
-      reader.readAsDataURL(file);
-      
-      // Upload to server
-      const formData = new FormData();
-      formData.append('image', file);
-      
-      uploadFeedback.innerHTML = '<p style="color: #666;">⏳ Lade Bild hoch...</p>';
-      
-      try {
-        const response = await fetch('/api/teacher/upload-image', {
-          method: 'POST',
-          body: formData
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-          uploadedImageUrl = data.imageUrl;
-          uploadFeedback.innerHTML = '<div class="success-msg">✅ Bild erfolgreich hochgeladen!</div>';
-          analyzeBtn.disabled = false;
-          
-          // Reset analysis
-          detectedObjects = [];
-          document.getElementById('objects-container').style.display = 'none';
-          document.getElementById('start-quiz-btn').disabled = true;
-        } else {
-          uploadFeedback.innerHTML = `<div class="error-msg">❌ ${data.error}</div>`;
-        }
+              <div class="info-row">
+                <span>💬 Nachrichten:</span>
+                <strong>${session.messages.length}</strong>
+              </div>
+              <div class="info-row">
+                <span>⏱️ Gestartet:</span>
+                <strong>${new Date(session.startTime).toLocaleString('de-DE')}</strong>
+              </div>
+              ${session.endTime ? `
+                <div class="info-row">
+                  <span>✅ Beendet:</span>
+                  <strong>${new Date(session.endTime).toLocaleString('de-DE')}</strong>
+                </div>
+              ` : ''}
+            </div>
+            <div class="messages-list">
+              ${session.messages.slice(-3).map(msg => `
+                <div class="message-item">
+                  <span class="message-role">${msg.role === 'user' ? '👤 Schüler' : '🤖 KI'}:</span>
+                  ${msg.content.substring(0, 100)}${msg.content.length > 100 ? '...' : ''}
+                </div>
+              `).join('')}
+            </div>
+            <div class="session-actions">
+              <button class="btn btn-primary" onclick="viewSession('${session.sessionId}')">
+                👁️ Details ansehen
+              </button>
+              ${session.status === 'active' ? `
+                <button class="btn btn-secondary" onclick="endSession('${session.sessionId}')">
+                  ⏹️ Beenden
+                </button>
+              ` : ''}
+              <button class="btn btn-danger" onclick="deleteSession('${session.sessionId}')">
+                🗑️ Löschen
+              </button>
+            </div>
+          </div>
+        `).join('');
       } catch (error) {
-        uploadFeedback.innerHTML = `<div class="error-msg">❌ Upload fehlgeschlagen: ${error.message}</div>`;
+        console.error('Error loading sessions:', error);
       }
     }
-    
-    // Analyze Image
-    async function analyzeImage() {
-      if (!uploadedImageUrl) return;
-      
-      const analysisFeedback = document.getElementById('analysis-feedback');
-      analysisFeedback.innerHTML = '<p style="color: #666; margin-top: 12px;">🔍 Analysiere Bild mit GPT-5 Vision...</p>';
-      analyzeBtn.disabled = true;
-      
-      try {
-        const response = await fetch('/api/teacher/analyze-image', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageUrl: uploadedImageUrl })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-          detectedObjects = data.objects;
-          
-          analysisFeedback.innerHTML = `<div class="success-msg">✅ ${data.count} Objekte erkannt!</div>`;
-          
-          // Show objects
-          document.getElementById('object-count').textContent = data.count;
-          const grid = document.getElementById('objects-grid');
-          grid.innerHTML = data.objects.map(obj => 
-            `<div class="object-badge">${obj}</div>`
-          ).join('');
-          document.getElementById('objects-container').style.display = 'block';
-          
-          // Enable start button
-          document.getElementById('start-quiz-btn').disabled = false;
-        } else {
-          analysisFeedback.innerHTML = `<div class="error-msg">❌ ${data.error}</div>`;
-        }
-      } catch (error) {
-        analysisFeedback.innerHTML = `<div class="error-msg">❌ Analyse fehlgeschlagen: ${error.message}</div>`;
-      } finally {
-        analyzeBtn.disabled = false;
-      }
-    }
-    
-    // Start Quiz
-    async function startQuiz() {
-      if (!uploadedImageUrl || detectedObjects.length === 0) return;
-      
-      try {
-        const response = await fetch('/api/teacher/start-image-quiz', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            imageUrl: uploadedImageUrl,
-            objects: detectedObjects
-          })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-          document.getElementById('quiz-status-box').innerHTML = `
-            <div class="quiz-status active">
-              <strong>✅ Quiz aktiv!</strong><br>
-              ${data.activeQuiz.objectCount} Objekte im Spiel
+
+    // View Session Details
+    function viewSession(sessionId) {
+      fetch(`/api/sessions/${sessionId}`)
+        .then(res => res.json())
+        .then(session => {
+          const modalBody = document.getElementById('modal-body');
+          modalBody.innerHTML = `
+            <div style="margin-bottom: 24px;">
+              <h3 style="margin-bottom: 8px;">📋 Session Info</h3>
+              <div style="background: #f7fafc; padding: 16px; border-radius: 8px;">
+                <p><strong>Schüler:</strong> ${session.studentName}</p>
+                <p><strong>Szenario:</strong> ${session.scenario}</p>
+                <p><strong>Status:</strong> ${session.status === 'active' ? '🟢 Aktiv' : '⚪ Beendet'}</p>
+                <p><strong>Gestartet:</strong> ${new Date(session.startTime).toLocaleString('de-DE')}</p>
+                ${session.endTime ? `<p><strong>Beendet:</strong> ${new Date(session.endTime).toLocaleString('de-DE')}</p>` : ''}
+              </div>
+            </div>
+            
+            <h3 style="margin-bottom: 16px;">💬 Konversation (${session.messages.length} Nachrichten)</h3>
+            <div style="max-height: 400px; overflow-y: auto;">
+              ${session.messages.map(msg => `
+                <div class="message-full">
+                  <div class="message-full-role">
+                    ${msg.role === 'user' ? '👤 Schüler' : '🤖 KI'}
+                  </div>
+                  <div class="message-full-content">${msg.content}</div>
+                </div>
+              `).join('')}
             </div>
           `;
-          
-          document.getElementById('start-quiz-btn').disabled = true;
-          document.getElementById('end-quiz-btn').disabled = false;
-        }
+          document.getElementById('session-modal').classList.add('active');
+        });
+    }
+
+    // Close Modal
+    function closeModal() {
+      document.getElementById('session-modal').classList.remove('active');
+    }
+
+    // End Session
+    async function endSession(sessionId) {
+      if (!confirm('Session wirklich beenden?')) return;
+      
+      try {
+        await fetch(`/api/sessions/${sessionId}/end`, { method: 'POST' });
+        loadSessions();
       } catch (error) {
-        alert('Quiz-Start fehlgeschlagen: ' + error.message);
+        alert('Fehler beim Beenden der Session');
       }
     }
-    
-    // End Quiz
-    async function endQuiz() {
+
+    // Delete Session
+    async function deleteSession(sessionId) {
+      if (!confirm('Session wirklich löschen?')) return;
+      
       try {
-        const response = await fetch('/api/teacher/end-image-quiz', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        });
+        await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
+        loadSessions();
+      } catch (error) {
+        alert('Fehler beim Löschen der Session');
+      }
+    }
+
+    // Load Vocab Stats
+    async function loadVocabStats() {
+      try {
+        const response = await fetch('/api/vocab-stats');
+        const stats = await response.json();
         
-        const data = await response.json();
+        // Update overall stats
+        document.getElementById('vocab-total-attempts').textContent = stats.totalAttempts;
+        document.getElementById('vocab-total-errors').textContent = stats.totalErrors;
+        document.getElementById('vocab-success-rate').textContent = 
+          stats.totalAttempts > 0 
+            ? Math.round((1 - stats.totalErrors / stats.totalAttempts) * 100) + '%'
+            : '0%';
         
-        if (data.success) {
-          document.getElementById('quiz-status-box').innerHTML = `
-            <div class="quiz-status">
-              <strong>🏁 Quiz beendet!</strong><br>
-              Dauer: ${Math.round(data.stats.duration / 1000)}s<br>
-              Teilnehmer: ${data.stats.students.length}
+        // Render difficulty table
+        const tbody = document.querySelector('#difficulty-table tbody');
+        if (stats.difficultWords.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="6" class="empty-state">
+                <div style="font-size: 48px; margin-bottom: 12px;">📊</div>
+                <div><strong>Noch keine Daten</strong></div>
+                <div style="font-size: 13px; margin-top: 8px;">
+                  Statistiken werden nach ersten Versuchen angezeigt
+                </div>
+              </td>
+            </tr>
+          `;
+          return;
+        }
+        
+        tbody.innerHTML = stats.difficultWords.map((word, index) => {
+          const successRate = word.attempts > 0 
+            ? Math.round((1 - word.errors / word.attempts) * 100)
+            : 0;
+          let difficultyClass = 'difficulty-low';
+          if (successRate < 50) difficultyClass = 'difficulty-high';
+          else if (successRate < 75) difficultyClass = 'difficulty-medium';
+          
+          return `
+            <tr>
+              <td>${index + 1}</td>
+              <td><strong>${word.english}</strong></td>
+              <td>${word.german}</td>
+              <td>${word.attempts}</td>
+              <td>${word.errors}</td>
+              <td class="${difficultyClass}">${successRate}%</td>
+            </tr>
+          `;
+        }).join('');
+      } catch (error) {
+        console.error('Error loading vocab stats:', error);
+      }
+    }
+
+    // Load Quiz Sessions
+    async function loadQuizSessions() {
+      try {
+        const response = await fetch('/api/quiz-sessions');
+        const sessions = await response.json();
+        
+        // Calculate stats
+        const totalQuestions = sessions.reduce((sum, s) => sum + s.questions.length, 0);
+        const avgConfidence = sessions.length > 0
+          ? Math.round(sessions.reduce((sum, s) => {
+              const sessionAvg = s.questions.reduce((qSum, q) => qSum + (q.confidence || 0), 0) / s.questions.length;
+              return sum + sessionAvg;
+            }, 0) / sessions.length * 100)
+          : 0;
+        
+        // Update stats
+        document.getElementById('quiz-total-sessions').textContent = sessions.length;
+        document.getElementById('quiz-total-questions').textContent = totalQuestions;
+        document.getElementById('quiz-avg-confidence').textContent = avgConfidence + '%';
+        
+        // Render sessions
+        const container = document.getElementById('quiz-container');
+        if (sessions.length === 0) {
+          container.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-icon">🖼️</div>
+              <h3>Keine Quiz-Sessions vorhanden</h3>
+              <p>Sessions erscheinen hier, sobald Schüler das Bild-Quiz nutzen</p>
             </div>
           `;
-          
-          document.getElementById('start-quiz-btn').disabled = false;
-          document.getElementById('end-quiz-btn').disabled = true;
+          return;
         }
+        
+        container.innerHTML = sessions.map(session => {
+          const avgConf = session.questions.length > 0
+            ? Math.round(session.questions.reduce((sum, q) => sum + (q.confidence || 0), 0) / session.questions.length * 100)
+            : 0;
+          
+          return `
+            <div class="quiz-card">
+              <img src="${session.imageUrl}" alt="Quiz Bild" class="quiz-image">
+              <div class="quiz-title">${session.studentName}</div>
+              <div class="quiz-info">
+                📅 ${new Date(session.timestamp).toLocaleString('de-DE')}
+              </div>
+              <div class="quiz-stats">
+                <div class="quiz-stat">
+                  <div class="quiz-stat-value">${session.questions.length}</div>
+                  <div class="quiz-stat-label">Fragen</div>
+                </div>
+                <div class="quiz-stat">
+                  <div class="quiz-stat-value">${avgConf}%</div>
+                  <div class="quiz-stat-label">Konfidenz</div>
+                </div>
+              </div>
+              <button class="btn btn-primary" onclick="viewQuizSession('${session.sessionId}')" style="width: 100%;">
+                👁️ Details ansehen
+              </button>
+            </div>
+          `;
+        }).join('');
       } catch (error) {
-        alert('Quiz konnte nicht beendet werden: ' + error.message);
+        console.error('Error loading quiz sessions:', error);
       }
     }
-    
-    // ===========================
-    // Logout
-    // ===========================
-    async function logout() {
-      const sessionId = localStorage.getItem('teacherSession');
-      
-      if (sessionId) {
-        await fetch('/api/teacher/logout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId })
+
+    // View Quiz Session Details
+    function viewQuizSession(sessionId) {
+      fetch(`/api/quiz-sessions/${sessionId}`)
+        .then(res => res.json())
+        .then(session => {
+          const modalBody = document.getElementById('modal-body');
+          modalBody.innerHTML = `
+            <div style="margin-bottom: 24px;">
+              <img src="${session.imageUrl}" alt="Quiz Bild" style="width: 100%; border-radius: 8px; margin-bottom: 16px;">
+              <h3 style="margin-bottom: 8px;">📋 Session Info</h3>
+              <div style="background: #f7fafc; padding: 16px; border-radius: 8px;">
+                <p><strong>Schüler:</strong> ${session.studentName}</p>
+                <p><strong>Zeitpunkt:</strong> ${new Date(session.timestamp).toLocaleString('de-DE')}</p>
+                <p><strong>Anzahl Fragen:</strong> ${session.questions.length}</p>
+              </div>
+            </div>
+            
+            <h3 style="margin-bottom: 16px;">❓ Fragen & Antworten</h3>
+            <div style="max-height: 400px; overflow-y: auto;">
+              ${session.questions.map((qa, index) => `
+                <div class="message-full" style="margin-bottom: 16px;">
+                  <div style="font-weight: 600; color: #667eea; margin-bottom: 8px;">
+                    ${index + 1}. Frage (Konfidenz: ${Math.round((qa.confidence || 0) * 100)}%)
+                  </div>
+                  <div style="background: white; padding: 12px; border-radius: 8px; margin-bottom: 8px;">
+                    <strong>👤 Frage:</strong> ${qa.question}
+                  </div>
+                  <div style="background: white; padding: 12px; border-radius: 8px;">
+                    <strong>🤖 Antwort:</strong> ${qa.answer}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          `;
+          document.getElementById('session-modal').classList.add('active');
         });
-      }
-      
-      localStorage.removeItem('teacherSession');
-      window.location.href = '/teacher-login.html';
     }
-    
-    // ===========================
-    // Session Check
-    // ===========================
-    async function checkSession() {
-      const sessionId = localStorage.getItem('teacherSession');
-      
-      if (!sessionId) {
-        window.location.href = '/teacher-login.html';
-        return;
+
+    // Close modal on background click
+    document.getElementById('session-modal').addEventListener('click', (e) => {
+      if (e.target.id === 'session-modal') {
+        closeModal();
       }
-      
-      const response = await fetch('/api/teacher/validate-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId })
-      });
-      
-      const data = await response.json();
-      
-      if (!data.valid) {
-        localStorage.removeItem('teacherSession');
-        window.location.href = '/teacher-login.html';
-      }
-    }
-    
-    // ===========================
-    // Initialize
-    // ===========================
-    checkSession();
-    connectDialogLab();
+    });
+
+    // Initial load
+    loadSessions();
+    loadVocabStats();
+    loadQuizSessions();
+
+    // Auto-refresh every 30 seconds
+    setInterval(() => {
+      const activeTab = document.querySelector('.tab.active').dataset.tab;
+      if (activeTab === 'dialog') loadSessions();
+      else if (activeTab === 'vocab') loadVocabStats();
+      else if (activeTab === 'quiz') loadQuizSessions();
+    }, 30000);
   </script>
 </body>
 </html>
