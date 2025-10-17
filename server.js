@@ -662,59 +662,74 @@ app.post('/api/teacher/end-image-quiz', (req, res) => {
   }
 });
 
+// ========================================
+// KORRIGIERTE VERSION - Erkennt mehrere Objekte in einem Satz
+// ========================================
 app.post('/api/student/check-object', (req, res) => {
   try {
     const { studentId, object } = req.body;
 
     if (!currentImageQuiz.active) {
-      return res.json({
-        correct: false,
-        message: 'Kein aktives Quiz',
-        alreadyGuessed: false
-      });
+      return res.json({ correct: false, message: 'Kein aktives Quiz', alreadyGuessed: false });
     }
 
     if (!currentImageQuiz.students.has(studentId)) {
-      currentImageQuiz.students.set(studentId, {
-        found: [],
-        score: 0
-      });
+      currentImageQuiz.students.set(studentId, { found: [], score: 0 });
     }
 
     const studentData = currentImageQuiz.students.get(studentId);
-    const objectLower = object.toLowerCase().trim();
+    const spokenWords = object.toLowerCase().trim().split(' ');
+    
+    let newlyFoundObjects = [];
+    let pointsThisTurn = 0;
 
-    if (studentData.found.includes(objectLower)) {
-      return res.json({
-        correct: false,
-        message: 'Du hast dieses Objekt bereits gefunden!',
-        alreadyGuessed: true,
-        totalFound: studentData.found.length
-      });
+    // Gehe jedes gesprochene Wort durch
+    for (const word of spokenWords) {
+      // Bereinige das Wort (z.B. Plural entfernen)
+      const singularWord = word.replace(/s$/, '');
+
+      // Prüfe, ob das Wort ein korrektes Objekt ist UND ob es noch nicht gefunden wurde
+      const isCorrect = currentImageQuiz.objects.some(obj => obj.replace(/s$/, '') === singularWord);
+      
+      if (isCorrect && !studentData.found.includes(singularWord)) {
+        studentData.found.push(singularWord);
+        newlyFoundObjects.push(singularWord);
+        pointsThisTurn += 10;
+      }
     }
 
-    const singularForm = objectLower.replace(/s$/, '');
-    const isCorrect = currentImageQuiz.objects.some(obj => {
-      const objSingular = obj.replace(/s$/, '');
-      return obj === objectLower || objSingular === singularForm;
-    });
-
-    if (isCorrect) {
-      studentData.found.push(objectLower);
-      const points = 10;
-      studentData.score += points;
-
+    if (newlyFoundObjects.length > 0) {
+      // Wenn mindestens ein neues Objekt gefunden wurde
+      studentData.score += pointsThisTurn;
+      
+      const message = `Super! Du hast gefunden: ${newlyFoundObjects.join(', ')}!`;
+      
       return res.json({
         correct: true,
-        message: `Richtig! "${object}" gefunden!`,
-        points,
+        message: message,
+        points: pointsThisTurn,
         totalFound: studentData.found.length,
-        alreadyGuessed: false
+        alreadyGuessed: false 
       });
+
     } else {
+      // Wenn kein neues, korrektes Objekt im Satz war
+      // Prüfen, ob der Fehler daran lag, dass die Objekte bereits genannt wurden
+      const alreadyGuessed = spokenWords.some(word => studentData.found.includes(word.replace(/s$/, '')));
+      
+      if(alreadyGuessed) {
+         return res.json({
+            correct: false,
+            message: `Diese Objekte hast du schon gefunden. Versuche ein anderes!`,
+            totalFound: studentData.found.length,
+            alreadyGuessed: true
+         });
+      }
+
+      // Ansonsten war es ein komplett falsches Wort
       return res.json({
         correct: false,
-        message: `"${object}" ist nicht im Bild.`,
+        message: `"${object}" ist nicht im Bild oder wurde nicht erkannt.`,
         totalFound: studentData.found.length,
         alreadyGuessed: false
       });
@@ -819,3 +834,4 @@ server.listen(PORT, () => {
   console.log('   🖼️  Image-Quiz: /image-quiz');
   console.log('🚀 ========================================');
 });
+
