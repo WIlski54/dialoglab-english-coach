@@ -10,24 +10,19 @@ const OpenAI = require('openai');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { randomUUID } = require('crypto');
 
 // ========================================
 // Express & Server Setup
 // ========================================
 const app = express();
 const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
 
-// WebSocket Servers für verschiedene Module
-const wssImageQuiz = new WebSocket.Server({ noServer: true }); // Bild-Quiz
-const wssStudent = new WebSocket.Server({ noServer: true });    // Dialog-Lab Student
-const wssTeacher = new WebSocket.Server({ noServer: true });    // Dialog-Lab Teacher
-
-// WICHTIG: Body Parser Limits
+// Body Parser Limits
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// CORS Middleware für Deployment
+// CORS Middleware
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
@@ -35,14 +30,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// Static Files ZUERST (wichtig für Render!)
+// Static Files
 app.use(express.static('public'));
 app.use('/uploads', express.static('uploads'));
-
-// Fallback für SPA-routing (index.html für alle nicht-API routes)
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
 
 const PORT = process.env.PORT || 3000;
 
@@ -53,1060 +43,449 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-const CHAT_MODEL = process.env.CHAT_MODEL || 'gpt-4o-mini';
-const TTS_MODEL = process.env.TTS_MODEL || 'tts-1';
-const TTS_VOICE = process.env.TTS_VOICE || 'alloy';
-const VISION_MODEL = process.env.VISION_MODEL || 'gpt-4o'; // Fallback auf gpt-4o für Vision!
-
 // ========================================
-// Uploads Ordner sicherstellen
-// ========================================
-const uploadDir = './uploads/images';
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-  console.log('📁 Upload-Ordner erstellt:', uploadDir);
-}
-
-// ========================================
-// Multer Setup für Bild-Upload
+// File Upload Setup
 // ========================================
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
+    const uploadDir = 'uploads';
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir);
+    }
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
-    const uniqueName = `${Date.now()}-${file.originalname}`;
-    cb(null, uniqueName);
+    cb(null, Date.now() + path.extname(file.originalname));
   }
 });
 
-const upload = multer({
+const upload = multer({ 
   storage: storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif|webp/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-    
-    if (extname && mimetype) {
-      cb(null, true);
-    } else {
-      cb(new Error('Nur Bilder sind erlaubt!'));
-    }
-  }
+  limits: { fileSize: 10 * 1024 * 1024 }
 });
 
 // ========================================
-// Globale Variablen
+// Data Storage
 // ========================================
-
-// Dialog-Lab Sessions
-const sessions = new Map();
-
-// Bild-Quiz State
-let activeImageQuiz = {
-  imageUrl: null,
-  imagePath: null,
-  detectedObjects: [],
-  studentsAnswers: new Map(),
-  isActive: false
+const dialogSessions = new Map();
+const vocabStats = {
+  words: new Map(),
+  totalAttempts: 0,
+  totalErrors: 0
 };
-
-// Lehrer-Login
-const TEACHER_PASSWORD = process.env.TEACHER_PASSWORD || 'lehrer123';
-const activeSessions = new Set();
+const quizSessions = [];
 
 // ========================================
-// WebSocket Upgrade Handler
+// MODUL 1: Dialog-Lab WebSocket
 // ========================================
-server.on('upgrade', (request, socket, head) => {
-  const pathname = new URL(request.url, `http://${request.headers.host}`).pathname;
-  
-  console.log('🔌 WebSocket upgrade request:', pathname);
-  
-  if (pathname === '/ws' || pathname === '/student') {
-    wssStudent.handleUpgrade(request, socket, head, (ws) => {
-      wssStudent.emit('connection', ws, request);
-    });
-  } else if (pathname === '/teacher') {
-    wssTeacher.handleUpgrade(request, socket, head, (ws) => {
-      wssTeacher.emit('connection', ws, request);
-    });
-  } else if (pathname === '/image-quiz') {
-    wssImageQuiz.handleUpgrade(request, socket, head, (ws) => {
-      wssImageQuiz.emit('connection', ws, request);
-    });
-  } else {
-    socket.destroy();
-  }
-});
+wss.on('connection', (ws) => {
+  console.log('📡 Client verbunden');
+  let sessionId = null;
 
-// ========================================
-// Dialog-Lab WebSocket Handlers
-// ========================================
-
-// Student WebSocket (Dialog-Lab)
-wssStudent.on('connection', (client) => {
-  const sessionId = randomUUID();
-  
-  sessions.set(sessionId, {
-    scenario: 'shop',
-    level: 'A2',
-    startedAt: Date.now(),
-    messages: [],
-    lastText: '',
-    vocabHits: [],
-    errors: []
-  });
-  
-  console.log('✅ Dialog-Lab Student connected:', sessionId);
-  
-  // Send welcome message
-  (async () => {
-    try {
-      const session = sessions.get(sessionId);
-      const systemPrompt = {
-        role: 'system',
-        content: `You are a friendly English conversation coach for German students (grades 7-10). 
-Keep your responses very short (1-2 sentences maximum). 
-Be encouraging and correct mistakes gently. 
-The current scenario is "${session.scenario}" and the student's level is ${session.level}.
-Stay within this scenario and use vocabulary appropriate for ${session.level} level.`
-      };
-      
-      const initialMessage = {
-        role: 'user',
-        content: `Start a friendly conversation about the "${session.scenario}" scenario. Greet the student warmly.`
-      };
-      
-      session.messages.push(systemPrompt, initialMessage);
-      
-      const completion = await openai.chat.completions.create({
-        model: CHAT_MODEL,
-        messages: session.messages,
-        max_completion_tokens: 150
-        // Kein temperature - GPT-4o-mini unterstützt es, aber wir lassen es weg für Konsistenz
-      });
-      
-      const aiResponse = completion.choices[0].message.content;
-      session.messages.push({ role: 'assistant', content: aiResponse });
-      
-      // Generate TTS
-      const mp3Response = await openai.audio.speech.create({
-        model: TTS_MODEL,
-        voice: TTS_VOICE,
-        input: aiResponse
-      });
-      
-      const buffer = Buffer.from(await mp3Response.arrayBuffer());
-      const audioBase64 = buffer.toString('base64');
-      
-      // Send response to client
-      client.send(JSON.stringify({
-        type: 'ai_response',
-        text: aiResponse,
-        audio: audioBase64
-      }));
-      
-      // Broadcast to teachers
-      broadcastToTeachers({
-        type: 'session_update',
-        sessionId: sessionId,
-        data: {
-          scenario: session.scenario,
-          level: session.level,
-          lastText: aiResponse
-        }
-      });
-      
-    } catch (error) {
-      console.error('❌ Welcome message error:', error);
-      client.send(JSON.stringify({
-        type: 'error',
-        message: 'Failed to start conversation'
-      }));
-    }
-  })();
-  
-  // Handle incoming messages
-  client.on('message', async (message) => {
-    try {
-      const data = JSON.parse(message);
-      const session = sessions.get(sessionId);
-      
-      if (!session) {
-        client.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
-        return;
-      }
-      
-      console.log('📨 Student message:', data.type);
-      
-      if (data.type === 'user_text') {
-        // User sent text message
-        session.lastText = data.text;
-        session.messages.push({ role: 'user', content: data.text });
-        
-        // Get AI response
-        const completion = await openai.chat.completions.create({
-          model: CHAT_MODEL,
-          messages: session.messages,
-          max_completion_tokens: 150
-        });
-        
-        const aiResponse = completion.choices[0].message.content;
-        session.messages.push({ role: 'assistant', content: aiResponse });
-        
-        // Generate TTS
-        const mp3Response = await openai.audio.speech.create({
-          model: TTS_MODEL,
-          voice: TTS_VOICE,
-          input: aiResponse
-        });
-        
-        const buffer = Buffer.from(await mp3Response.arrayBuffer());
-        const audioBase64 = buffer.toString('base64');
-        
-        // Send response
-        client.send(JSON.stringify({
-          type: 'ai_response',
-          text: aiResponse,
-          audio: audioBase64
-        }));
-        
-        // Broadcast to teachers
-        broadcastToTeachers({
-          type: 'session_update',
-          sessionId: sessionId,
-          data: {
-            scenario: session.scenario,
-            level: session.level,
-            lastText: data.text,
-            aiResponse: aiResponse
-          }
-        });
-        
-      } else if (data.type === 'change_scenario') {
-        session.scenario = data.scenario;
-        session.level = data.level;
-        session.messages = [];
-        
-        client.send(JSON.stringify({
-          type: 'scenario_changed',
-          scenario: data.scenario,
-          level: data.level
-        }));
-        
-      } else if (data.type === 'ping') {
-        client.send(JSON.stringify({ type: 'pong' }));
-      }
-      
-    } catch (error) {
-      console.error('❌ Message handler error:', error);
-      client.send(JSON.stringify({
-        type: 'error',
-        message: error.message
-      }));
-    }
-  });
-  
-  client.on('close', () => {
-    console.log('🔌 Dialog-Lab Student disconnected:', sessionId);
-    sessions.delete(sessionId);
-    
-    broadcastToTeachers({
-      type: 'session_ended',
-      sessionId: sessionId
-    });
-  });
-  
-  client.on('error', (error) => {
-    console.error('❌ WebSocket error:', error);
-  });
-});
-
-// Teacher WebSocket (Dialog-Lab Dashboard)
-wssTeacher.on('connection', (ws) => {
-  console.log('✅ Dialog-Lab Teacher connected');
-  
-  // Send current sessions snapshot
-  const snapshot = Array.from(sessions.entries()).map(([id, session]) => ({
-    id,
-    scenario: session.scenario,
-    level: session.level,
-    lastText: session.lastText || '',
-    startedAt: session.startedAt
-  }));
-  
-  ws.send(JSON.stringify({
-    type: 'sessions_snapshot',
-    sessions: snapshot
-  }));
-  
-  ws.on('close', () => {
-    console.log('🔌 Dialog-Lab Teacher disconnected');
-  });
-});
-
-function broadcastToTeachers(data) {
-  wssTeacher.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify(data));
-    }
-  });
-}
-
-// ========================================
-// Bild-Quiz WebSocket Handler
-// ========================================
-wssImageQuiz.on('connection', (ws) => {
-  console.log('✅ Bild-Quiz WebSocket connected');
-  
   ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message);
-      console.log('📨 Bild-Quiz message:', data.type);
-      
-      if (data.type === 'ping') {
-        ws.send(JSON.stringify({ type: 'pong' }));
+
+      if (data.type === 'start_session') {
+        sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        dialogSessions.set(sessionId, {
+          sessionId,
+          studentName: data.studentName,
+          scenario: data.scenario,
+          messages: [],
+          startTime: new Date(),
+          status: 'active'
+        });
+
+        ws.send(JSON.stringify({
+          type: 'session_started',
+          sessionId,
+          systemMessage: getScenarioPrompt(data.scenario)
+        }));
+
+        console.log(`✅ Session gestartet: ${sessionId} für ${data.studentName}`);
       }
-      
+
+      if (data.type === 'user_message' && sessionId) {
+        const session = dialogSessions.get(sessionId);
+        
+        session.messages.push({
+          role: 'user',
+          content: data.message
+        });
+
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: getScenarioPrompt(session.scenario)
+            },
+            ...session.messages
+          ],
+          temperature: 0.7
+        });
+
+        const aiResponse = completion.choices[0].message.content;
+        
+        session.messages.push({
+          role: 'assistant',
+          content: aiResponse
+        });
+
+        ws.send(JSON.stringify({
+          type: 'ai_response',
+          message: aiResponse
+        }));
+      }
+
+      if (data.type === 'end_session' && sessionId) {
+        const session = dialogSessions.get(sessionId);
+        if (session) {
+          session.status = 'finished';
+          session.endTime = new Date();
+        }
+        console.log(`🏁 Session beendet: ${sessionId}`);
+      }
+
     } catch (error) {
-      console.error('❌ Bild-Quiz WebSocket error:', error);
-      ws.send(JSON.stringify({ 
-        type: 'error', 
-        message: error.message 
+      console.error('❌ WebSocket Fehler:', error);
+      ws.send(JSON.stringify({
+        type: 'error',
+        message: 'Ein Fehler ist aufgetreten'
       }));
     }
   });
-  
+
   ws.on('close', () => {
-    console.log('🔌 Bild-Quiz WebSocket disconnected');
-  });
-  
-  ws.on('error', (error) => {
-    console.error('❌ Bild-Quiz WebSocket error:', error);
+    console.log('📡 Client getrennt');
   });
 });
 
-// Broadcast function for Image Quiz
-function broadcastImageQuizToClients(data) {
-  wssImageQuiz.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify(data));
-    }
-  });
+function getScenarioPrompt(scenario) {
+  const prompts = {
+    restaurant: `You are a friendly waiter in an English restaurant. Help the student practice ordering food. Be encouraging and patient. Speak only English. Keep responses conversational and natural. Correct mistakes gently by rephrasing correctly.`,
+    
+    shopping: `You are a helpful shop assistant in an English store. Help the student practice shopping conversations. Be encouraging and patient. Speak only English. Keep responses conversational and natural. Correct mistakes gently by rephrasing correctly.`,
+    
+    airport: `You are a friendly airport staff member. Help the student practice airport conversations like check-in, security, and finding gates. Be encouraging and patient. Speak only English. Keep responses conversational and natural. Correct mistakes gently by rephrasing correctly.`,
+    
+    doctor: `You are a caring doctor in an English clinic. Help the student practice describing symptoms and medical conversations. Be encouraging and patient. Speak only English. Keep responses conversational and natural. Correct mistakes gently by rephrasing correctly.`,
+    
+    hotel: `You are a friendly hotel receptionist. Help the student practice hotel conversations like check-in, room service, and asking for directions. Be encouraging and patient. Speak only English. Keep responses conversational and natural. Correct mistakes gently by rephrasing correctly.`
+  };
+
+  return prompts[scenario] || prompts.restaurant;
 }
 
 // ========================================
-// Health Check (wichtig für Render)
-// ========================================
-app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
-});
-
-// ========================================
-// DIALOG-LAB APIs
+// MODUL 2: Vokabel-Trainer API
 // ========================================
 
-// Chat API
-app.post('/api/chat', async (req, res) => {
-  try {
-    const { messages } = req.body;
-    
-    if (!messages || !Array.isArray(messages)) {
-      return res.status(400).json({ error: 'Invalid messages format' });
-    }
-    
-    const completion = await openai.chat.completions.create({
-      model: CHAT_MODEL,
-      messages: messages,
-      max_completion_tokens: 500
-    });
-    
-    const reply = completion.choices[0].message.content;
-    console.log('💬 Chat response:', reply.substring(0, 50) + '...');
-    
-    res.json({ reply });
-  } catch (error) {
-    console.error('❌ Chat error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// TTS API
-app.post('/api/tts', async (req, res) => {
+// TTS für Vokabeln
+app.post('/api/speak', async (req, res) => {
   try {
     const { text } = req.body;
     
-    if (!text) {
-      return res.status(400).json({ error: 'Text is required' });
-    }
-    
-    console.log('🔊 TTS für:', text.substring(0, 50));
-    
-    const mp3Response = await openai.audio.speech.create({
-      model: TTS_MODEL,
-      voice: TTS_VOICE,
+    const mp3 = await openai.audio.speech.create({
+      model: 'tts-1',
+      voice: 'alloy',
       input: text
     });
-    
-    const buffer = Buffer.from(await mp3Response.arrayBuffer());
-    const audioBase64 = buffer.toString('base64');
-    
-    res.json({ audio: audioBase64 });
+
+    const buffer = Buffer.from(await mp3.arrayBuffer());
+    res.set('Content-Type', 'audio/mpeg');
+    res.send(buffer);
   } catch (error) {
-    console.error('❌ TTS error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('TTS Error:', error);
+    res.status(500).json({ error: 'TTS fehlgeschlagen' });
   }
 });
 
-// ========================================
-// VOKABEL-TRAINER APIs
-// ========================================
-
-// TTS für einzelnes Wort
-app.post('/api/vocab/speak-word', async (req, res) => {
+// KI-Tipp für Vokabeln
+app.post('/api/vocab-hint', async (req, res) => {
   try {
-    const { word } = req.body;
-    
-    if (!word) {
-      return res.status(400).json({ error: 'Missing word' });
-    }
-    
-    console.log('🔊 Generating TTS for:', word);
-    
-    const mp3Response = await openai.audio.speech.create({
-      model: TTS_MODEL,
-      voice: TTS_VOICE,
-      input: word
-    });
-    
-    const buffer = Buffer.from(await mp3Response.arrayBuffer());
-    const audioBase64 = buffer.toString('base64');
-    
-    res.json({ audio: audioBase64 });
-    
-  } catch (error) {
-    console.error('❌ TTS generation error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+    const { english, german } = req.body;
 
-// Tipp generieren mit ChatGPT
-app.post('/api/vocab/get-hint', async (req, res) => {
-  try {
-    const { word, germanWord } = req.body;
-    
-    if (!word || !germanWord) {
-      return res.status(400).json({ error: 'Missing word or germanWord' });
-    }
-    
-    console.log('💡 Generating hint for:', word);
-    
     const completion = await openai.chat.completions.create({
-      model: CHAT_MODEL,
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
-          content: 'You are a helpful English teacher. Generate a SHORT hint (max 10 words) in German to help a student guess the English word. The hint should be helpful but not give away the entire answer.'
+          content: 'Du bist ein hilfreicher Englischlehrer. Gib einen kurzen, hilfreichen Tipp zum Lernen dieses Vokabels. Maximal 2 Sätze auf Deutsch.'
         },
         {
           role: 'user',
-          content: `Das deutsche Wort ist "${germanWord}". Das englische Wort ist "${word}". Gib einen kurzen Tipp auf Deutsch.`
+          content: `Englisch: ${english}\nDeutsch: ${german}`
         }
       ],
-      max_completion_tokens: 50
+      temperature: 0.7,
+      max_tokens: 100
     });
-    
-    const hint = completion.choices[0].message.content.trim();
-    
-    res.json({ hint });
-    
+
+    res.json({ hint: completion.choices[0].message.content });
   } catch (error) {
-    console.error('❌ Hint generation error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('Hint Error:', error);
+    res.status(500).json({ error: 'Tipp konnte nicht generiert werden' });
   }
 });
 
-// ========================================
-// BILD-QUIZ APIs
-// ========================================
-
-// Bild hochladen (Lehrer)
-app.post('/api/teacher/upload-image', upload.single('image'), async (req, res) => {
+// Aussprache-Check
+app.post('/api/check-pronunciation', async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'Kein Bild hochgeladen' });
-    }
+    const { audio } = req.body;
     
-    const imageUrl = `/uploads/images/${req.file.filename}`;
-    const imagePath = req.file.path;
+    const audioBuffer = Buffer.from(audio.split(',')[1], 'base64');
     
-    console.log('📸 Bild hochgeladen:', imageUrl);
-    
-    res.json({
-      success: true,
-      imageUrl: imageUrl,
-      imagePath: imagePath,
-      message: 'Bild erfolgreich hochgeladen'
+    const transcription = await openai.audio.transcriptions.create({
+      file: await toFile(audioBuffer, 'audio.webm'),
+      model: 'whisper-1'
     });
-    
+
+    res.json({ 
+      transcription: transcription.text,
+      success: true 
+    });
   } catch (error) {
-    console.error('❌ Upload error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('Pronunciation Check Error:', error);
+    res.status(500).json({ error: 'Aussprachebewertung fehlgeschlagen' });
   }
 });
 
-// Bild analysieren mit GPT-4 Vision
-app.post('/api/teacher/analyze-image', async (req, res) => {
+// Helper für File-Upload
+async function toFile(buffer, filename) {
+  const blob = new Blob([buffer]);
+  return new File([blob], filename);
+}
+
+// Vokabel-Statistik speichern
+app.post('/api/vocab-stats', (req, res) => {
   try {
-    const { imageUrl } = req.body;
+    const { english, german, correct } = req.body;
     
-    if (!imageUrl) {
-      return res.status(400).json({ error: 'Keine Bild-URL angegeben' });
-    }
+    const key = `${english}|${german}`;
     
-    console.log('🔍 Analysiere Bild:', imageUrl);
-    
-    // Vollständige URL konstruieren - IMMER HTTPS!
-    const fullImageUrl = imageUrl.startsWith('http') 
-      ? imageUrl.replace('http://', 'https://') // Force HTTPS!
-      : `https://${req.get('host')}${imageUrl}`;
-    
-    console.log('🌐 Full URL:', fullImageUrl);
-    console.log('🔐 URL verwendet HTTPS:', fullImageUrl.startsWith('https'));
-    
-    // GPT-5 Vision API Call mit Error Handling
-    let response;
-    try {
-      response = await openai.chat.completions.create({
-        model: VISION_MODEL,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: `Look at this image and identify the MAIN visible objects that a student would naturally recognize.
-
-IMPORTANT: Reply with ONLY a JSON array, nothing else.
-
-Format: ["object1", "object2", "object3"]
-
-Rules:
-- Use common English nouns (lowercase, singular form)
-- Only list MAIN, OBVIOUS objects - not small details or parts
-- Ignore: shadows, reflections, backgrounds, small decorative elements
-- Include: food items, animals, people, furniture, vehicles, plants (as whole objects)
-- A student should be able to identify these without overthinking
-- List 10-20 main objects
-
-Good examples: "apple", "banana", "car", "person", "tree", "house"
-Bad examples: "leaf" (part of apple), "stem", "shadow", "texture"
-
-Example response:
-["banana", "carrot", "cheese", "apple", "basket", "table"]`
-              },
-              {
-                type: 'image_url',
-                image_url: { url: fullImageUrl }
-              }
-            ]
-          }
-        ],
-        max_completion_tokens: 500  // GPT-5: max_completion_tokens, kein temperature!
-      });
-      
-      console.log('✅ OpenAI API Call erfolgreich');
-      console.log('📊 Response Status:', response);
-      
-    } catch (apiError) {
-      console.error('❌ OpenAI API Error:', apiError.message);
-      console.error('📄 Error Details:', JSON.stringify(apiError, null, 2));
-      throw new Error(`OpenAI API Error: ${apiError.message}`);
-    }
-    
-    const content = response.choices[0].message.content;
-    console.log('🔍 GPT-5 Vision Antwort (Länge:', content.length, ')');
-    console.log('🔍 Erste 500 Zeichen:', content.substring(0, 500));
-    
-    // JSON extrahieren - robustes Parsing
-    let detectedObjects = [];
-    
-    // Versuche 1: Direktes JSON Parsing
-    try {
-      detectedObjects = JSON.parse(content);
-      console.log('✅ Direktes JSON Parsing erfolgreich');
-    } catch (e) {
-      console.log('⚠️ Direktes Parsing fehlgeschlagen, versuche Regex...');
-      
-      // Versuche 2: JSON Array mit Regex extrahieren
-      const jsonMatch = content.match(/\[[\s\S]*?\]/);
-      if (jsonMatch) {
-        try {
-          detectedObjects = JSON.parse(jsonMatch[0]);
-          console.log('✅ Regex-basiertes Parsing erfolgreich');
-        } catch (e2) {
-          console.error('❌ Regex-Parsing auch fehlgeschlagen:', e2);
-        }
-      }
-      
-      // Versuche 3: Markdown Code Block extrahieren
-      if (detectedObjects.length === 0) {
-        const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-        if (codeBlockMatch) {
-          try {
-            detectedObjects = JSON.parse(codeBlockMatch[1].trim());
-            console.log('✅ Code-Block Parsing erfolgreich');
-          } catch (e3) {
-            console.error('❌ Code-Block-Parsing fehlgeschlagen:', e3);
-          }
-        }
-      }
-      
-      // Versuche 4: Zeilenweise Objekte extrahieren (falls als Liste formatiert)
-      if (detectedObjects.length === 0) {
-        const lines = content.split('\n')
-          .map(line => line.trim())
-          .filter(line => line.length > 0 && !line.startsWith('#') && !line.startsWith('-'));
-        
-        if (lines.length > 0) {
-          console.log('⚠️ Versuche zeilenweise Extraktion...');
-          // Prüfe ob es wie eine Liste aussieht
-          const listMatch = content.match(/["']([^"']+)["']/g);
-          if (listMatch) {
-            detectedObjects = listMatch.map(m => m.replace(/["']/g, '').toLowerCase().trim());
-            console.log('✅ Zeilenweise Extraktion erfolgreich');
-          }
-        }
-      }
-      
-      // Wenn immer noch leer, Fehler werfen
-      if (detectedObjects.length === 0) {
-        console.error('❌ Alle Parsing-Versuche fehlgeschlagen');
-        console.error('Vollständige Antwort:', content);
-        throw new Error('Konnte keine Objekte aus der Antwort extrahieren. GPT-5 Antwortformat unbekannt.');
-      }
-    }
-    
-    console.log('📊 Anzahl extrahierter Rohwerte:', detectedObjects.length);
-    
-    // Filter: Entferne zu detaillierte/kleine Objekte
-    const detailsBlacklist = [
-      'leaf', 'stem', 'shadow', 'reflection', 'background',
-      'surface', 'texture', 'pattern', 'spot', 'mark',
-      'light', 'shine', 'glow', 'edge', 'corner',
-      'line', 'dot', 'pixel', 'color', 'shade'
-    ];
-    
-    detectedObjects = detectedObjects.filter(obj => 
-      !detailsBlacklist.includes(obj.toLowerCase())
-    );
-    
-    console.log('🧹 Nach Detail-Filter:', detectedObjects.length);
-    
-    // Normalisieren: lowercase, trim, deduplizieren
-    detectedObjects = [...new Set(
-      detectedObjects
-        .filter(obj => typeof obj === 'string') // Nur Strings
-        .map(obj => obj.toLowerCase().trim())
-        .filter(obj => obj.length > 0 && obj.length < 50) // Vernünftige Länge
-    )];
-    
-    console.log('✅ Erkannte Objekte nach Normalisierung:', detectedObjects.length);
-    console.log('📝 Objekte:', detectedObjects.slice(0, 10).join(', '), '...');
-    
-    res.json({
-      success: true,
-      objects: detectedObjects,
-      count: detectedObjects.length
-    });
-    
-  } catch (error) {
-    console.error('❌ Analyse error:', error);
-    res.status(500).json({ 
-      error: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
-  }
-});
-
-// Bild-Quiz starten & an Schüler senden
-app.post('/api/teacher/start-image-quiz', (req, res) => {
-  try {
-    const { imageUrl, objects } = req.body;
-    
-    if (!imageUrl || !objects || objects.length === 0) {
-      return res.status(400).json({ error: 'Bild-URL und Objekte erforderlich' });
-    }
-    
-    // Quiz-State aktualisieren
-    activeImageQuiz = {
-      imageUrl: imageUrl,
-      detectedObjects: objects,
-      studentsAnswers: new Map(),
-      isActive: true,
-      startTime: Date.now()
-    };
-    
-    console.log('🎯 Bild-Quiz gestartet mit', objects.length, 'Objekten');
-    
-    // Broadcast an alle verbundenen Schüler
-    broadcastImageQuizToClients({
-      type: 'image_quiz_start',
-      imageUrl: imageUrl,
-      totalObjects: objects.length,
-      message: 'Neues Bild-Quiz gestartet!'
-    });
-    
-    res.json({
-      success: true,
-      message: 'Quiz gestartet und an alle Schüler gesendet',
-      activeQuiz: {
-        imageUrl: activeImageQuiz.imageUrl,
-        objectCount: activeImageQuiz.detectedObjects.length
-      }
-    });
-    
-  } catch (error) {
-    console.error('❌ Start quiz error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Objekt-Antwort prüfen (Schüler) - INTELLIGENTE VERSION!
-app.post('/api/student/check-object', (req, res) => {
-  try {
-    const { studentId, object } = req.body;
-    
-    if (!activeImageQuiz.isActive) {
-      return res.status(400).json({ 
-        error: 'Kein aktives Quiz',
-        correct: false 
+    if (!vocabStats.words.has(key)) {
+      vocabStats.words.set(key, {
+        english,
+        german,
+        attempts: 0,
+        errors: 0
       });
     }
     
-    if (!studentId || !object) {
-      return res.status(400).json({ error: 'StudentId und object erforderlich' });
+    const wordStat = vocabStats.words.get(key);
+    wordStat.attempts++;
+    if (!correct) {
+      wordStat.errors++;
+      vocabStats.totalErrors++;
     }
-    
-    // Hilfsfunktion: Plural/Singular normalisieren
-    function normalizePlural(word) {
-      const w = word.toLowerCase().trim();
-      
-      // Bereits Singular? Beides zurückgeben
-      if (!w.endsWith('s')) {
-        return [w, w + 's'];
-      }
-      
-      // Plural → Singular versuchen
-      if (w.endsWith('ies')) {
-        // berries → berry
-        return [w.slice(0, -3) + 'y', w];
-      } else if (w.endsWith('es')) {
-        // boxes → box, aber apples → apple
-        if (w.endsWith('shes') || w.endsWith('ches') || w.endsWith('xes')) {
-          return [w.slice(0, -2), w];
-        }
-        return [w.slice(0, -2), w.slice(0, -1), w];
-      } else if (w.endsWith('s')) {
-        // carrots → carrot
-        return [w.slice(0, -1), w];
-      }
-      
-      return [w];
-    }
-    
-    // Student-Antworten tracken
-    if (!activeImageQuiz.studentsAnswers.has(studentId)) {
-      activeImageQuiz.studentsAnswers.set(studentId, new Set());
-    }
-    const studentAnswers = activeImageQuiz.studentsAnswers.get(studentId);
-    
-    // INTELLIGENZ: Mehrere Wörter in der Antwort erkennen
-    const words = object.toLowerCase()
-      .split(/[\s,]+/)  // Split bei Leerzeichen und Kommas
-      .map(w => w.trim())
-      .filter(w => w.length > 0);
-    
-    console.log(`🎯 Schüler ${studentId} hat gesagt: "${object}"`);
-    console.log(`📝 Erkannte Wörter:`, words);
-    
-    // Ergebnisse sammeln
-    let correctWords = [];
-    let incorrectWords = [];
-    let alreadyGuessedWords = [];
-    let totalPoints = 0;
-    
-    for (const word of words) {
-      // Normalisiere Plural/Singular
-      const variants = normalizePlural(word);
-      
-      // Prüfe ob irgendeine Variante im Bild ist
-      let foundVariant = null;
-      for (const variant of variants) {
-        if (activeImageQuiz.detectedObjects.includes(variant)) {
-          foundVariant = variant;
-          break;
-        }
-      }
-      
-      if (foundVariant) {
-        // Prüfe ob bereits genannt
-        const alreadyNamed = variants.some(v => studentAnswers.has(v));
-        
-        if (alreadyNamed) {
-          alreadyGuessedWords.push(word);
-        } else {
-          correctWords.push(word);
-          // Alle Varianten als "genannt" markieren
-          variants.forEach(v => studentAnswers.add(v));
-          totalPoints += 10;
-        }
-      } else {
-        incorrectWords.push(word);
-      }
-    }
-    
-    console.log(`✅ Richtig: ${correctWords.length}, ❌ Falsch: ${incorrectWords.length}, ⚠️ Bereits genannt: ${alreadyGuessedWords.length}`);
-    
-    // Feedback generieren
-    let message = '';
-    let responseType = 'incorrect';
-    
-    if (correctWords.length > 0) {
-      responseType = 'correct';
-      if (correctWords.length === 1) {
-        message = `Richtig! "${correctWords[0]}" gefunden! +${totalPoints} Punkte`;
-      } else {
-        message = `Super! ${correctWords.length} Objekte gefunden: ${correctWords.join(', ')}! +${totalPoints} Punkte`;
-      }
-      
-      // Zusätzliche Infos anhängen
-      if (alreadyGuessedWords.length > 0) {
-        message += ` (${alreadyGuessedWords.join(', ')} hattest du schon)`;
-      }
-      if (incorrectWords.length > 0) {
-        message += ` (${incorrectWords.join(', ')} nicht im Bild)`;
-      }
-    } else if (alreadyGuessedWords.length > 0) {
-      responseType = 'already';
-      if (alreadyGuessedWords.length === 1) {
-        message = `"${alreadyGuessedWords[0]}" hast du bereits genannt!`;
-      } else {
-        message = `Diese Objekte hast du bereits genannt: ${alreadyGuessedWords.join(', ')}`;
-      }
-      
-      if (incorrectWords.length > 0) {
-        message += ` (${incorrectWords.join(', ')} nicht im Bild)`;
-      }
-    } else {
-      // Alles falsch
-      if (words.length === 1) {
-        message = `"${words[0]}" ist nicht im Bild!`;
-      } else {
-        message = `Diese Objekte sind nicht im Bild: ${incorrectWords.join(', ')}`;
-      }
-    }
-    
-    res.json({
-      correct: correctWords.length > 0,
-      points: totalPoints,
-      message: message,
-      alreadyGuessed: alreadyGuessedWords.length > 0 && correctWords.length === 0,
-      totalFound: studentAnswers.size,
-      totalObjects: activeImageQuiz.detectedObjects.length,
-      details: {
-        correct: correctWords,
-        incorrect: incorrectWords,
-        alreadyGuessed: alreadyGuessedWords
-      }
-    });
-    
-  } catch (error) {
-    console.error('❌ Check object error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Quiz beenden (Lehrer)
-app.post('/api/teacher/end-image-quiz', (req, res) => {
-  try {
-    if (!activeImageQuiz.isActive) {
-      return res.status(400).json({ error: 'Kein aktives Quiz' });
-    }
-    
-    // Statistiken sammeln
-    const stats = {
-      duration: Date.now() - activeImageQuiz.startTime,
-      totalObjects: activeImageQuiz.detectedObjects.length,
-      students: []
-    };
-    
-    activeImageQuiz.studentsAnswers.forEach((answers, studentId) => {
-      stats.students.push({
-        id: studentId,
-        found: answers.size,
-        objects: Array.from(answers)
-      });
-    });
-    
-    // Broadcast Quiz-Ende an alle Schüler
-    broadcastImageQuizToClients({
-      type: 'image_quiz_end',
-      message: 'Quiz beendet!',
-      stats: stats
-    });
-    
-    console.log('🏁 Quiz beendet:', stats);
-    
-    // Quiz zurücksetzen
-    activeImageQuiz.isActive = false;
-    
-    res.json({
-      success: true,
-      message: 'Quiz beendet',
-      stats: stats
-    });
-    
-  } catch (error) {
-    console.error('❌ End quiz error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Quiz-Status abrufen
-app.get('/api/quiz/status', (req, res) => {
-  res.json({
-    isActive: activeImageQuiz.isActive,
-    imageUrl: activeImageQuiz.imageUrl,
-    totalObjects: activeImageQuiz.detectedObjects.length,
-    connectedStudents: activeImageQuiz.studentsAnswers.size
-  });
-});
-
-// ========================================
-// LEHRER-LOGIN APIs
-// ========================================
-
-// Lehrer Login
-app.post('/api/teacher/login', (req, res) => {
-  try {
-    const { password } = req.body;
-    
-    if (!password) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Passwort erforderlich' 
-      });
-    }
-    
-    // Passwort prüfen
-    if (password === TEACHER_PASSWORD) {
-      const sessionId = Math.random().toString(36).substring(2);
-      activeSessions.add(sessionId);
-      
-      console.log('✅ Lehrer eingeloggt - Session:', sessionId);
-      
-      res.json({
-        success: true,
-        message: 'Login erfolgreich',
-        sessionId: sessionId
-      });
-    } else {
-      console.log('❌ Falsches Passwort');
-      
-      res.status(401).json({
-        success: false,
-        error: 'Falsches Passwort'
-      });
-    }
-    
-  } catch (error) {
-    console.error('❌ Login error:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-});
-
-// Session validieren
-app.post('/api/teacher/validate-session', (req, res) => {
-  try {
-    const { sessionId } = req.body;
-    
-    if (activeSessions.has(sessionId)) {
-      res.json({ valid: true });
-    } else {
-      res.json({ valid: false });
-    }
-    
-  } catch (error) {
-    console.error('❌ Validation error:', error);
-    res.status(500).json({ 
-      valid: false, 
-      error: error.message 
-    });
-  }
-});
-
-// Logout
-app.post('/api/teacher/logout', (req, res) => {
-  try {
-    const { sessionId } = req.body;
-    
-    if (sessionId) {
-      activeSessions.delete(sessionId);
-      console.log('👋 Lehrer ausgeloggt');
-    }
+    vocabStats.totalAttempts++;
     
     res.json({ success: true });
-    
   } catch (error) {
-    console.error('❌ Logout error:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
+    console.error('Stats Error:', error);
+    res.status(500).json({ error: 'Statistik konnte nicht gespeichert werden' });
+  }
+});
+
+// Vokabel-Statistik abrufen (für Dashboard)
+app.get('/api/vocab-stats', (req, res) => {
+  try {
+    const wordsArray = Array.from(vocabStats.words.values());
+    
+    // Top 20 schwierigste Vokabeln
+    const difficultWords = wordsArray
+      .filter(w => w.attempts >= 2)
+      .sort((a, b) => {
+        const errorRateA = a.errors / a.attempts;
+        const errorRateB = b.errors / b.attempts;
+        if (errorRateB !== errorRateA) {
+          return errorRateB - errorRateA;
+        }
+        return b.attempts - a.attempts;
+      })
+      .slice(0, 20);
+    
+    res.json({
+      totalAttempts: vocabStats.totalAttempts,
+      totalErrors: vocabStats.totalErrors,
+      difficultWords
     });
+  } catch (error) {
+    console.error('Get Stats Error:', error);
+    res.status(500).json({ error: 'Statistik konnte nicht abgerufen werden' });
   }
 });
 
 // ========================================
-// Error Handler (muss am Ende sein!)
+// MODUL 3: Bild-Quiz API
 // ========================================
-app.use((err, req, res, next) => {
-  console.error('❌ Global error:', err);
-  res.status(500).json({ 
-    error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
-  });
+
+app.post('/api/analyze-image', upload.single('image'), async (req, res) => {
+  try {
+    const { question, studentName } = req.body;
+    const imageUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are an English teacher helping students practice English by answering questions about images. Answer in clear, simple English. Be encouraging and educational.'
+        },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: question },
+            { type: 'image_url', image_url: { url: imageUrl } }
+          ]
+        }
+      ],
+      max_tokens: 300
+    });
+
+    const answer = completion.choices[0].message.content;
+
+    // Session speichern
+    const sessionId = `quiz_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const quizSession = {
+      sessionId,
+      studentName,
+      imageUrl,
+      questions: [{
+        question,
+        answer,
+        confidence: 0.95,
+        timestamp: new Date()
+      }],
+      timestamp: new Date()
+    };
+
+    // Prüfen ob bereits eine Session für dieses Bild existiert
+    const existingSession = quizSessions.find(s => s.imageUrl === imageUrl && s.studentName === studentName);
+    
+    if (existingSession) {
+      existingSession.questions.push({
+        question,
+        answer,
+        confidence: 0.95,
+        timestamp: new Date()
+      });
+    } else {
+      quizSessions.push(quizSession);
+    }
+
+    res.json({ 
+      answer,
+      success: true,
+      sessionId: existingSession ? existingSession.sessionId : sessionId
+    });
+
+  } catch (error) {
+    console.error('Image Analysis Error:', error);
+    res.status(500).json({ error: 'Bildanalyse fehlgeschlagen' });
+  }
+});
+
+// Quiz-Sessions abrufen (für Dashboard)
+app.get('/api/quiz-sessions', (req, res) => {
+  try {
+    res.json(quizSessions);
+  } catch (error) {
+    console.error('Get Quiz Sessions Error:', error);
+    res.status(500).json({ error: 'Quiz-Sessions konnten nicht abgerufen werden' });
+  }
+});
+
+// Einzelne Quiz-Session abrufen
+app.get('/api/quiz-sessions/:sessionId', (req, res) => {
+  try {
+    const session = quizSessions.find(s => s.sessionId === req.params.sessionId);
+    if (!session) {
+      return res.status(404).json({ error: 'Session nicht gefunden' });
+    }
+    res.json(session);
+  } catch (error) {
+    console.error('Get Quiz Session Error:', error);
+    res.status(500).json({ error: 'Session konnte nicht abgerufen werden' });
+  }
 });
 
 // ========================================
-// Server starten
+// Dialog-Lab Session Management (für Dashboard)
+// ========================================
+
+// Alle Sessions abrufen
+app.get('/api/sessions', (req, res) => {
+  try {
+    const sessions = Array.from(dialogSessions.values());
+    res.json(sessions);
+  } catch (error) {
+    console.error('Get Sessions Error:', error);
+    res.status(500).json({ error: 'Sessions konnten nicht abgerufen werden' });
+  }
+});
+
+// Einzelne Session abrufen
+app.get('/api/sessions/:sessionId', (req, res) => {
+  try {
+    const session = dialogSessions.get(req.params.sessionId);
+    if (!session) {
+      return res.status(404).json({ error: 'Session nicht gefunden' });
+    }
+    res.json(session);
+  } catch (error) {
+    console.error('Get Session Error:', error);
+    res.status(500).json({ error: 'Session konnte nicht abgerufen werden' });
+  }
+});
+
+// Session beenden
+app.post('/api/sessions/:sessionId/end', (req, res) => {
+  try {
+    const session = dialogSessions.get(req.params.sessionId);
+    if (!session) {
+      return res.status(404).json({ error: 'Session nicht gefunden' });
+    }
+    session.status = 'finished';
+    session.endTime = new Date();
+    res.json({ success: true });
+  } catch (error) {
+    console.error('End Session Error:', error);
+    res.status(500).json({ error: 'Session konnte nicht beendet werden' });
+  }
+});
+
+// Session löschen
+app.delete('/api/sessions/:sessionId', (req, res) => {
+  try {
+    const deleted = dialogSessions.delete(req.params.sessionId);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Session nicht gefunden' });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete Session Error:', error);
+    res.status(500).json({ error: 'Session konnte nicht gelöscht werden' });
+  }
+});
+
+// ========================================
+// Server Start
 // ========================================
 server.listen(PORT, () => {
+  console.log('🚀 ========================================');
+  console.log('🎓 DialogLab - English Coach Server');
+  console.log('🚀 ========================================');
+  console.log(`📡 Server läuft auf Port ${PORT}`);
+  console.log(`🌐 http://localhost:${PORT}`);
   console.log('');
-  console.log('🚀 DialogLab Server gestartet!');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log(`📍 Port: ${PORT}`);
-  console.log(`💬 Chat Model: ${CHAT_MODEL}`);
-  console.log(`🔊 TTS Model: ${TTS_MODEL}`);
-  console.log(`👁️  Vision Model: ${VISION_MODEL}`);
-  console.log(`🔐 Lehrer-Passwort gesetzt: ${process.env.TEACHER_PASSWORD ? '✅' : '⚠️  Standard (lehrer123)'}`);
-  console.log(`🔑 OpenAI API Key: ${process.env.OPENAI_API_KEY ? '✅' : '❌ FEHLT!'}`);
-  console.log('');
-  console.log('✅ Module geladen:');
-  console.log('   - Dialog-Lab (WebSocket: /ws oder /student)');
-  console.log('   - Vokabel-Trainer');
-  console.log('   - Bild-Quiz (GPT-5 Vision, WebSocket: /image-quiz)');
-  console.log('   - Lehrer-Login System');
-  console.log('   - Teacher Dashboard (WebSocket: /teacher)');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('');
+  console.log('📚 Module verfügbar:');
+  console.log('   💬 Dialog-Lab: /dialog-lab.html');
+  console.log('   📖 Vokabel-Trainer: /vocab-trainer.html');
+  console.log('   🖼️  Bild-Quiz: /image-quiz.html');
+  console.log('   👨‍🏫 Lehrer-Dashboard: /teacher-dashboard.html');
+  console.log('🚀 ========================================');
 });
