@@ -12,22 +12,36 @@ const path = require('path');
 const fs = require('fs');
 
 // ========================================
-// Express & Server Setup
+// Express & Server Setup (MODIFIZIERTE, ROBUSTERE VERSION)
 // ========================================
 const app = express();
 const server = http.createServer(app);
 
-// WebSocket Server auf /ws Path (Dialog-Lab)
-const wssDialogLab = new WebSocket.Server({ 
-  server,
-  path: '/ws'
+// WebSocket Server OHNE direkte Server-Bindung initialisieren
+const wssDialogLab = new WebSocket.Server({ noServer: true });
+const wssImageQuiz = new WebSocket.Server({ noServer: true });
+
+// Manuelles Upgrade-Handling für beide WebSocket-Pfade
+server.on('upgrade', (request, socket, head) => {
+  const pathname = request.url;
+
+  if (pathname === '/ws') {
+    wssDialogLab.handleUpgrade(request, socket, head, (ws) => {
+      wssDialogLab.emit('connection', ws, request);
+    });
+  } else if (pathname === '/image-quiz') {
+    wssImageQuiz.handleUpgrade(request, socket, head, (ws) => {
+      wssImageQuiz.emit('connection', ws, request);
+    });
+  } else {
+    // Wenn der Pfad nicht passt, die Verbindung beenden
+    socket.destroy();
+  }
 });
 
-// WebSocket Server auf /image-quiz Path (Bild-Quiz)
-const wssImageQuiz = new WebSocket.Server({
-  server,
-  path: '/image-quiz'
-});
+// ========================================
+// Middleware & Static Files
+// ========================================
 
 // Body Parser Limits
 app.use(express.json({ limit: '50mb' }));
@@ -70,7 +84,7 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage: storage,
   limits: { fileSize: 10 * 1024 * 1024 }
 });
@@ -123,7 +137,7 @@ function getScenarioPrompt(scenario, level) {
 
 wssDialogLab.on('connection', (ws) => {
   console.log('📡 Dialog-Lab Client verbunden');
-  
+
   let sessionData = {
     messages: [],
     scenario: 'restaurant',
@@ -143,20 +157,20 @@ wssDialogLab.on('connection', (ws) => {
         sessionData.scenario = data.scenario || 'restaurant';
         sessionData.level = data.level || 'A2';
         sessionData.messages = [];
-        
+
         dialogSessions.set(sessionData.sessionId, {
           ...sessionData,
           messages: [...sessionData.messages]
         });
-        
+
         ws.send(JSON.stringify({
           type: 'scenario_changed',
           scenario: sessionData.scenario,
           level: sessionData.level
         }));
-        
+
         console.log(`✅ Scenario: ${sessionData.scenario}, Level: ${sessionData.level}`);
-        
+
         // KI startet automatisch das Gespräch
         try {
           const completion = await openai.chat.completions.create({
@@ -176,12 +190,12 @@ wssDialogLab.on('connection', (ws) => {
           });
 
           const aiText = completion.choices[0].message.content;
-          
+
           sessionData.messages.push({
             role: 'assistant',
             content: aiText
           });
-          
+
           dialogSessions.set(sessionData.sessionId, {
             ...sessionData,
             messages: [...sessionData.messages]
@@ -208,7 +222,7 @@ wssDialogLab.on('connection', (ws) => {
           }));
 
           console.log('✅ AI started conversation automatically');
-          
+
         } catch (error) {
           console.error('Auto-start error:', error);
         }
@@ -216,7 +230,7 @@ wssDialogLab.on('connection', (ws) => {
 
       if (data.type === 'user_text') {
         const userMessage = data.text;
-        
+
         sessionData.messages.push({
           role: 'user',
           content: userMessage
@@ -236,12 +250,12 @@ wssDialogLab.on('connection', (ws) => {
         });
 
         const aiText = completion.choices[0].message.content;
-        
+
         sessionData.messages.push({
           role: 'assistant',
           content: aiText
         });
-        
+
         dialogSessions.set(sessionData.sessionId, {
           ...sessionData,
           messages: [...sessionData.messages]
@@ -298,7 +312,7 @@ wssDialogLab.on('connection', (ws) => {
 app.post('/api/speak', async (req, res) => {
   try {
     const { text } = req.body;
-    
+
     const mp3 = await openai.audio.speech.create({
       model: 'tts-1',
       voice: 'alloy',
@@ -344,22 +358,22 @@ app.post('/api/vocab-hint', async (req, res) => {
 app.post('/api/check-pronunciation', async (req, res) => {
   try {
     const { audio } = req.body;
-    
+
     const audioBuffer = Buffer.from(audio.split(',')[1], 'base64');
-    
+
     const tempFile = path.join(__dirname, 'temp_audio.webm');
     fs.writeFileSync(tempFile, audioBuffer);
-    
+
     const transcription = await openai.audio.transcriptions.create({
       file: fs.createReadStream(tempFile),
       model: 'whisper-1'
     });
-    
+
     fs.unlinkSync(tempFile);
 
-    res.json({ 
+    res.json({
       transcription: transcription.text,
-      success: true 
+      success: true
     });
   } catch (error) {
     console.error('Pronunciation Check Error:', error);
@@ -370,9 +384,9 @@ app.post('/api/check-pronunciation', async (req, res) => {
 app.post('/api/vocab-stats', (req, res) => {
   try {
     const { english, german, correct } = req.body;
-    
+
     const key = `${english}|${german}`;
-    
+
     if (!vocabStats.words.has(key)) {
       vocabStats.words.set(key, {
         english,
@@ -381,7 +395,7 @@ app.post('/api/vocab-stats', (req, res) => {
         errors: 0
       });
     }
-    
+
     const wordStat = vocabStats.words.get(key);
     wordStat.attempts++;
     if (!correct) {
@@ -389,7 +403,7 @@ app.post('/api/vocab-stats', (req, res) => {
       vocabStats.totalErrors++;
     }
     vocabStats.totalAttempts++;
-    
+
     res.json({ success: true });
   } catch (error) {
     console.error('Stats Error:', error);
@@ -400,7 +414,7 @@ app.post('/api/vocab-stats', (req, res) => {
 app.get('/api/vocab-stats', (req, res) => {
   try {
     const wordsArray = Array.from(vocabStats.words.values());
-    
+
     const difficultWords = wordsArray
       .filter(w => w.attempts >= 2)
       .sort((a, b) => {
@@ -412,7 +426,7 @@ app.get('/api/vocab-stats', (req, res) => {
         return b.attempts - a.attempts;
       })
       .slice(0, 20);
-    
+
     res.json({
       totalAttempts: vocabStats.totalAttempts,
       totalErrors: vocabStats.totalErrors,
@@ -468,7 +482,7 @@ app.post('/api/analyze-image', upload.single('image'), async (req, res) => {
     };
 
     const existingSession = quizSessions.find(s => s.imageUrl === imageUrl && s.studentName === studentName);
-    
+
     if (existingSession) {
       existingSession.questions.push({
         question,
@@ -480,7 +494,7 @@ app.post('/api/analyze-image', upload.single('image'), async (req, res) => {
       quizSessions.push(quizSession);
     }
 
-    res.json({ 
+    res.json({
       answer,
       success: true,
       sessionId: existingSession ? existingSession.sessionId : sessionId
@@ -521,9 +535,9 @@ app.get('/api/quiz-sessions/:sessionId', (req, res) => {
 app.post('/api/teacher/upload-image', upload.single('image'), (req, res) => {
   try {
     const imageUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
-    res.json({ 
+    res.json({
       success: true,
-      imageUrl 
+      imageUrl
     });
   } catch (error) {
     console.error('Upload Error:', error);
