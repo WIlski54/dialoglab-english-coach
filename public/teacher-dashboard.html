@@ -479,7 +479,6 @@
       <button class="tab" data-tab="quiz">🖼️ Bild-Quiz</button>
     </div>
 
-    <!-- Dialog-Lab Tab -->
     <div id="dialog" class="tab-content active">
       <h2>💬 Dialog-Lab Sessions</h2>
       <p style="color: #666; margin-bottom: 20px;">
@@ -510,7 +509,6 @@
       </div>
     </div>
 
-    <!-- Vokabel-Trainer Tab -->
     <div id="vocab" class="tab-content">
       <h2>📚 Vokabel-Trainer Statistiken</h2>
       <p style="color: #666; margin-bottom: 20px;">
@@ -574,13 +572,16 @@
       </div>
     </div>
 
-    <!-- Bild-Quiz Tab -->
     <div id="quiz" class="tab-content">
       <h2>🖼️ Bild-Quiz Aktivitäten</h2>
       <p style="color: #666; margin-bottom: 20px;">
         Übersicht aller durchgeführten Bild-Quiz Sessions
       </p>
 
+      <a href="/teacher-image-quiz.html" class="btn btn-primary" 
+         style="display: block; width: 100%; text-align: center; margin-bottom: 32px; background: #10b981; border-color: #10b981;">
+        🚀 Neues Live-Bild-Quiz starten (Zur Steuerung)
+      </a>
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-value" id="quiz-total-sessions">0</div>
@@ -614,7 +615,6 @@
     </div>
   </div>
 
-  <!-- Modal für Session Details -->
   <div class="modal" id="session-modal">
     <div class="modal-content">
       <div class="modal-header">
@@ -622,8 +622,7 @@
         <button class="modal-close" onclick="closeModal()">&times;</button>
       </div>
       <div id="modal-body">
-        <!-- Wird dynamisch gefüllt -->
-      </div>
+        </div>
     </div>
   </div>
 
