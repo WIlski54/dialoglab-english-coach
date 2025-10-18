@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale-1" />
   <title>Lehrer-Login - DialogLab</title>
   <style>
     * {
@@ -222,11 +222,11 @@
         const data = await response.json();
         
         if (data.success) {
-          // KORRIGIERT: Speichert den korrekten Schlüssel im sessionStorage
           sessionStorage.setItem('teacher-authenticated', 'true');
           
-          // Leitet zum Bild-Quiz Dashboard weiter (wie von der Logik vorgesehen)
-          window.location.href = '/teacher-image-quiz.html';
+          // KORRIGIERTE WEITERLEITUNG:
+          // Leitet jetzt zum Haupt-Dashboard statt nur zum Bild-Quiz
+          window.location.href = '/teacher-dashboard.html';
         } else {
           showError(data.error || 'Login fehlgeschlagen');
           loginBtn.disabled = false;
@@ -246,7 +246,6 @@
       errorMsg.textContent = '❌ ' + message;
       errorMsg.classList.add('show');
       
-      // Remove message after a few seconds
       setTimeout(() => {
         errorMsg.classList.remove('show');
       }, 4000);
