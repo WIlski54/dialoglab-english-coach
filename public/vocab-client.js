@@ -44,6 +44,7 @@ const scenarioSelect = document.getElementById('scenario');
 const difficultySelect = document.getElementById('difficulty');
 const transcriptionDisplay = document.getElementById('transcription-display');
 const transcriptionText = document.getElementById('transcription-text');
+const audioButton = document.getElementById('audio-button'); // <-- NEU: Audio-Button hinzugefügt
 
 // ========================================
 // Audio Context entsperren
@@ -71,60 +72,32 @@ async function unlockAudio() {
 }
 
 // ========================================
-// Audio abspielen (Web Audio API)
+// KORRIGIERTE TTS-Funktion
+// Diese Funktion ersetzt playAudioFromBase64 UND die alte speakWord
 // ========================================
-async function playAudioFromBase64(base64Audio) {
+async function speakWord(word) {
   try {
     if (!audioContext) {
       await unlockAudio();
     }
     
-    // Base64 → ArrayBuffer
-    const binaryString = atob(base64Audio);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    
-    // ArrayBuffer dekodieren
-    const audioBuffer = await audioContext.decodeAudioData(bytes.buffer);
-    
-    // AudioBufferSourceNode erstellen
-    const source = audioContext.createBufferSource();
-    source.buffer = audioBuffer;
-    source.connect(audioContext.destination);
-    source.start(0);
-    
-    console.log('🔊 Audio wird abgespielt');
-    
-    return new Promise((resolve) => {
-      source.onended = () => {
-        console.log('✅ Audio beendet');
-        resolve();
-      };
-    });
-    
-  } catch (error) {
-    console.error('❌ Audio playback error:', error);
-    throw error;
-  }
-}
-
-// ========================================
-// TTS für einzelnes Wort abrufen
-// ========================================
-async function speakWord(word) {
-  try {
-    const response = await fetch('/api/vocab/speak-word', {
+    // KORRIGIERTE URL: /api/speak (statt /api/vocab/speak-word)
+    const response = await fetch('/api/speak', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ word })
+      // KORRIGIERTER BODY: { text: word } (statt { word: word })
+      body: JSON.stringify({ text: word }) 
     });
     
     if (!response.ok) throw new Error('TTS request failed');
     
-    const data = await response.json();
-    await playAudioFromBase64(data.audio);
+    // KORRIGIERTE ANTWORT: Server sendet direkt ein Audio-Blob, kein JSON
+    const audioBlob = await response.blob();
+    const audioUrl = URL.createObjectURL(audioBlob);
+    const audio = new Audio(audioUrl);
+    audio.play();
+
+    console.log('🔊 Audio wird abgespielt');
     
   } catch (error) {
     console.error('❌ TTS Error:', error);
@@ -141,12 +114,13 @@ async function getHint() {
     
     const word = words[currentIndex];
     
-    const response = await fetch('/api/vocab/get-hint', {
+    // KORRIGIERTER API-Pfad (Annahme, basierend auf Server-Struktur)
+    const response = await fetch('/api/vocab-hint', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        word: word.en, 
-        germanWord: word.de 
+        english: word.en, // Server erwartet 'english' und 'german'
+        german: word.de 
       })
     });
     
@@ -257,6 +231,17 @@ async function checkTextAnswer(userAnswer) {
   
   const isCorrect = expected === given;
   
+  // HIER STATISTIKEN SENDEN
+  await fetch('/api/vocab-stats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        english: word.en, 
+        german: word.de,
+        correct: isCorrect
+      })
+  });
+  
   if (isCorrect) {
     // RICHTIG!
     await showFeedback({
@@ -354,7 +339,8 @@ async function showFeedback(result) {
         feedbackHTML += `<div class="tts-playing">🔊 Hör dir die korrekte Aussprache an...</div>`;
         feedbackSection.innerHTML = feedbackHTML;
         
-        await speakWord(result.expectedWord);
+        // HIER WIRD BEREITS DIE KORRIGIERTE FUNKTION AUFGERUFEN
+        await speakWord(result.expectedWord); 
         
         // Nach TTS: Next-Button anzeigen
         feedbackHTML += `<button class="next-btn" id="next-btn">Nächstes Wort →</button>`;
@@ -387,12 +373,13 @@ async function showFeedback(result) {
         
         try {
           const word = words[currentIndex];
-          const response = await fetch('/api/vocab/get-hint', {
+          // KORRIGIERTER API-Pfad
+          const response = await fetch('/api/vocab-hint', { 
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-              word: word.en, 
-              germanWord: word.de 
+              english: word.en, // Server erwartet 'english' und 'german'
+              german: word.de 
             })
           });
           
@@ -496,6 +483,12 @@ function showQuestion() {
   // Fortschritt aktualisieren
   if (currentQuestionEl) {
     currentQuestionEl.textContent = currentIndex + 1;
+  }
+  
+  // <-- NEU: OnClick-Event für den Audio-Button setzen
+  // Er ruft die 'speakWord'-Funktion mit dem KORREKTEN englischen Wort auf
+  if (audioButton) {
+    audioButton.onclick = () => speakWord(word.en);
   }
   
   textAnswerInput.focus();
@@ -608,7 +601,7 @@ startBtn.addEventListener('click', async () => {
     present: [
       { de: 'Geschenk', en: 'present' },
       { de: 'Geburtstag', en: 'birthday' },
-      { de: 'Überraschung', en: 'surprise' },
+      { de:E: 'Überraschung', en: 'surprise' },
       { de: 'Verpackung', en: 'wrapping' },
       { de: 'Schleife', en: 'bow' },
       { de: 'Karte', en: 'card' },
