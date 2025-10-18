@@ -160,6 +160,30 @@
       color: #333;
       margin: 20px 0;
     }
+
+    /* NEU: Container für Wort und Audio-Button */
+    .word-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 15px;
+    }
+    
+    /* NEU: Audio-Button */
+    .audio-btn {
+      font-size: 32px;
+      cursor: pointer;
+      border: none;
+      background: none;
+      padding: 5px;
+      line-height: 1;
+      opacity: 0.7;
+      transition: opacity 0.2s, transform 0.2s;
+    }
+    .audio-btn:hover {
+      opacity: 1;
+      transform: scale(1.1);
+    }
     
     .hint {
       color: #888;
@@ -443,13 +467,11 @@
 </head>
 <body>
   <div class="container">
-    <!-- Header -->
     <div class="header">
       <h1>📚 Vokabel-Training</h1>
       <a href="/index.html" class="back-btn">← Zurück</a>
     </div>
     
-    <!-- Setup -->
     <div class="setup" id="setup">
       <h2>Wähle dein Thema</h2>
       <div class="setup-controls">
@@ -477,9 +499,7 @@
       </div>
     </div>
     
-    <!-- Quiz -->
     <div class="quiz" id="quiz">
-      <!-- Fortschritt -->
       <div class="progress">
         <div class="progress-item">
           <div class="progress-label">Frage</div>
@@ -495,20 +515,23 @@
         </div>
       </div>
       
-      <!-- Frage -->
       <div class="question-card">
         <h2>Übersetze ins Englische:</h2>
-        <div class="word-to-translate" id="german-word">Apfel</div>
+        
+        <div class="word-container">
+          <div class="word-to-translate" id="german-word">Apfel</div>
+          <button class="audio-btn" id="audio-button" 
+                  title="Englische Aussprache anhören">🔈</button>
+        </div>
+
         <div class="hint">Sprich klar und deutlich!</div>
       </div>
       
-      <!-- Antwort -->
       <div class="answer-section">
         <button class="record-btn" id="record-btn">
           🎤 Aufnehmen & Sprechen
         </button>
         
-        <!-- Transkriptions-Anzeige -->
         <div class="transcription-display" id="transcription-display" style="display: none;">
           <span class="transcription-label">Du hast gesagt:</span>
           <span class="transcription-text" id="transcription-text">apple</span>
@@ -521,12 +544,10 @@
           <button class="submit-btn" id="submit-btn">✓</button>
         </div>
         
-        <!-- Tipp-Button -->
         <button class="hint-btn" id="hint-btn" style="display: none;">💡 Tipp</button>
         <div class="hint-display" id="hint-text" style="display: none;"></div>
       </div>
       
-      <!-- Feedback -->
       <div class="feedback" id="feedback">
         <div class="feedback-icon">✅</div>
         <div class="feedback-text">Richtig!</div>
@@ -537,7 +558,6 @@
         <button class="next-btn" id="next-btn">Nächstes Wort →</button>
       </div>
       
-      <!-- Ergebnis -->
       <div class="results" id="results">
         <h2>🎉 Training abgeschlossen!</h2>
         
@@ -568,6 +588,52 @@
       </div>
     </div>
   </div>
+  
+  <script>
+    // Globale Variable, die von vocab-client.js gesetzt werden muss
+    let currentEnglishWord = ''; 
+    
+    /**
+     * Spielt die Audio-Aussprache für das aktuell geladene englische Wort ab.
+     */
+    async function playAudioForWord() {
+      if (!currentEnglishWord) {
+        console.warn('Kein englisches Wort zum Abspielen gesetzt.');
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/speak', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: currentEnglishWord })
+        });
+
+        if (!response.ok) {
+          throw new Error('Audio konnte nicht erzeugt werden (Server-Antwort nicht ok)');
+        }
+
+        const audioBlob = await response.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+        
+        const audio = new Audio(audioUrl);
+        audio.play();
+
+      } catch (error) {
+        console.error('Fehler bei der Sprachausgabe:', error);
+        alert('Fehler bei der Sprachausgabe.');
+      }
+    }
+    
+    // Verknüpft die Funktion mit dem Button
+    // Wir verwenden querySelector, um sicherzustellen, dass es funktioniert
+    document.addEventListener('DOMContentLoaded', () => {
+      const audioButton = document.getElementById('audio-button');
+      if (audioButton) {
+        audioButton.onclick = playAudioForWord;
+      }
+    });
+  </script>
   
   <script src="./vocab-client.js"></script>
 </body>
