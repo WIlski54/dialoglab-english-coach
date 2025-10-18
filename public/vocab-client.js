@@ -1,8 +1,7 @@
 // ========================================
-// Vokabeltrainer Client - ERWEITERT
+// Vokabeltrainer Client - FINAL mit Audio
 // ========================================
 
-let ws;
 let audioContext = null;
 let audioUnlocked = false;
 
@@ -44,7 +43,7 @@ const scenarioSelect = document.getElementById('scenario');
 const difficultySelect = document.getElementById('difficulty');
 const transcriptionDisplay = document.getElementById('transcription-display');
 const transcriptionText = document.getElementById('transcription-text');
-const audioButton = document.getElementById('audio-button'); // <-- NEU: Audio-Button hinzugefügt
+const audioButton = document.getElementById('audio-button'); // Zugriff auf den Audio-Button
 
 // ========================================
 // Audio Context entsperren
@@ -62,45 +61,71 @@ async function unlockAudio() {
     source.connect(audioContext.destination);
     source.start(0);
     
+    // Wichtig: Kurze Pause, um sicherzustellen, dass der Context wirklich aktiv ist
+    await new Promise(resolve => setTimeout(resolve, 50)); 
+    
     audioUnlocked = true;
     console.log('✅ Audio Context entsperrt!');
     return true;
   } catch (e) {
     console.error('❌ Audio unlock failed:', e);
+    // Versuchen, den Context bei der nächsten Interaktion zu erstellen
+    audioUnlocked = false; 
     return false;
   }
 }
 
 // ========================================
-// KORRIGIERTE TTS-Funktion
-// Diese Funktion ersetzt playAudioFromBase64 UND die alte speakWord
+// KORRIGIERTE TTS-Funktion (Sprachausgabe)
 // ========================================
 async function speakWord(word) {
+  if (!word) {
+    console.warn("Kein Wort zum Aussprechen übergeben.");
+    return;
+  }
+  
   try {
-    if (!audioContext) {
+    // Sicherstellen, dass der Audio Context bereit ist
+    if (!audioContext || audioContext.state === 'suspended') {
       await unlockAudio();
     }
+     // Falls immer noch nicht bereit (z.B. User hat nie interagiert), abbrechen
+    if (!audioUnlocked) { 
+        alert("Audio kann nicht abgespielt werden. Bitte interagiere zuerst mit der Seite (z.B. Klick).");
+        return;
+    }
     
-    // KORRIGIERTE URL: /api/speak (statt /api/vocab/speak-word)
+    console.log(`🔊 Versuche "${word}" auszusprechen...`);
+    
+    // API-Aufruf an den korrekten Endpunkt
     const response = await fetch('/api/speak', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      // KORRIGIERTER BODY: { text: word } (statt { word: word })
       body: JSON.stringify({ text: word }) 
     });
     
-    if (!response.ok) throw new Error('TTS request failed');
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`TTS request failed: ${response.status} ${errorText}`);
+    }
     
-    // KORRIGIERTE ANTWORT: Server sendet direkt ein Audio-Blob, kein JSON
+    // Server sendet direkt ein Audio-Blob
     const audioBlob = await response.blob();
     const audioUrl = URL.createObjectURL(audioBlob);
     const audio = new Audio(audioUrl);
-    audio.play();
+    
+    // Fehlerbehandlung für das Audio-Element selbst
+    audio.onerror = (e) => {
+        console.error("❌ Fehler beim Abspielen des Audio-Elements:", e);
+        alert("Fehler beim Abspielen der Aussprache.");
+    };
 
-    console.log('🔊 Audio wird abgespielt');
+    audio.play();
+    console.log('▶️ Audio wird abgespielt');
     
   } catch (error) {
     console.error('❌ TTS Error:', error);
+    alert('Fehler bei der Sprachausgabe. Details siehe Konsole.');
   }
 }
 
@@ -114,7 +139,7 @@ async function getHint() {
     
     const word = words[currentIndex];
     
-    // KORRIGIERTER API-Pfad (Annahme, basierend auf Server-Struktur)
+    // Korrekter API-Pfad
     const response = await fetch('/api/vocab-hint', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -131,11 +156,11 @@ async function getHint() {
     // Tipp anzeigen
     hintText.textContent = `💡 ${data.hint}`;
     hintText.style.display = 'block';
-    hintBtn.style.display = 'none';
+    hintBtn.style.display = 'none'; // Button ausblenden nach Tipp
     
   } catch (error) {
     console.error('❌ Hint Error:', error);
-    hintBtn.textContent = '💡 Tipp';
+    hintBtn.textContent = '💡 Tipp'; // Button zurücksetzen im Fehlerfall
     hintBtn.disabled = false;
   }
 }
@@ -145,21 +170,26 @@ async function getHint() {
 // ========================================
 function setupSpeechRecognition() {
   if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    console.warn("Speech Recognition nicht verfügbar.");
     recordBtn.disabled = true;
-    recordBtn.title = 'Speech Recognition nicht verfügbar';
+    recordBtn.title = 'Spracherkennung nicht verfügbar in diesem Browser.';
+    // Verstecke den Button ganz, wenn es gar nicht geht
+    recordBtn.style.display = 'none'; 
+    // Zeige die Texteingabe als Fallback prominenter an
+    document.querySelector('.or-divider').style.display = 'none'; 
     return;
   }
   
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   recognition = new SpeechRecognition();
-  recognition.lang = 'en-US';
-  recognition.continuous = false;
-  recognition.interimResults = false;
+  recognition.lang = 'en-US'; // Zielsprache Englisch
+  recognition.continuous = false; // Nur eine Äußerung erkennen
+  recognition.interimResults = false; // Nur finale Ergebnisse
   
   recognition.onstart = () => {
     isRecording = true;
     recordBtn.classList.add('recording');
-    recordBtn.textContent = '⏸️ Aufnahme läuft...';
+    recordBtn.textContent = '👂 Höre zu...'; // Geändert für Klarheit
   };
   
   recognition.onend = () => {
@@ -170,9 +200,19 @@ function setupSpeechRecognition() {
   
   recognition.onerror = (event) => {
     console.error('❌ Recognition error:', event.error);
-    isRecording = false;
+    isRecording = false; // Sicherstellen, dass der Status zurückgesetzt wird
     recordBtn.classList.remove('recording');
     recordBtn.textContent = '🎤 Aufnehmen & Sprechen';
+    // Spezifisches Feedback für häufige Fehler
+    if (event.error === 'no-speech') {
+        alert("Ich habe nichts gehört. Bitte versuche es lauter oder näher am Mikrofon.");
+    } else if (event.error === 'audio-capture') {
+        alert("Problem mit dem Mikrofon. Stelle sicher, dass es verbunden und nicht stummgeschaltet ist.");
+    } else if (event.error === 'not-allowed') {
+        alert("Zugriff auf das Mikrofon wurde verweigert. Bitte erlaube den Zugriff in den Browser-Einstellungen.");
+    } else {
+        alert(`Spracherkennungsfehler: ${event.error}`);
+    }
   };
   
   recognition.onresult = async (event) => {
@@ -183,8 +223,8 @@ function setupSpeechRecognition() {
     transcriptionText.textContent = transcript;
     transcriptionDisplay.style.display = 'block';
     
-    // Kurze Pause für visuelles Feedback (800ms)
-    await new Promise(resolve => setTimeout(resolve, 800));
+    // Kurze Pause für visuelles Feedback
+    await new Promise(resolve => setTimeout(resolve, 500)); // Kürzere Pause
     
     // Antwort automatisch prüfen
     await checkAnswer(transcript, 'voice');
@@ -192,9 +232,11 @@ function setupSpeechRecognition() {
 }
 
 // ========================================
-// Antwort prüfen
+// Antwort prüfen (Hauptlogik)
 // ========================================
 async function checkAnswer(userAnswer, inputType = 'text') {
+  if (!userAnswer) return; // Leere Eingaben ignorieren
+
   const word = words[currentIndex];
   currentAttempts++;
   
@@ -202,76 +244,58 @@ async function checkAnswer(userAnswer, inputType = 'text') {
   submitBtn.disabled = true;
   recordBtn.disabled = true;
   textAnswerInput.disabled = true;
+  hintBtn.style.display = 'none'; // Tipp-Button während Prüfung ausblenden
   
   try {
-    // Bei Sprachantwort: Whisper-Analyse
-    if (inputType === 'voice') {
-      // Hier müssten wir eigentlich das Audio an Whisper senden
-      // Vereinfacht: direkte Textprüfung
-      await checkTextAnswer(userAnswer);
-    } else {
-      await checkTextAnswer(userAnswer);
-    }
-    
+      await checkTextAnswer(userAnswer); // Nur noch eine Prüffunktion
   } catch (error) {
     console.error('❌ Check error:', error);
+    // Buttons im Fehlerfall wieder aktivieren
     submitBtn.disabled = false;
     recordBtn.disabled = false;
     textAnswerInput.disabled = false;
+    // Zeige Tipp-Button wieder an, wenn 1. Versuch war
+    if (currentAttempts < MAX_ATTEMPTS) {
+        hintBtn.style.display = 'inline-block';
+    }
   }
 }
 
 // ========================================
-// Text-Antwort prüfen
+// Text-Antwort prüfen & Statistik senden
 // ========================================
 async function checkTextAnswer(userAnswer) {
   const word = words[currentIndex];
   const expected = word.en.toLowerCase().trim();
   const given = userAnswer.toLowerCase().trim();
   
+  // Hier könnte man Fuzzy Matching einbauen (siehe spätere Erweiterung)
   const isCorrect = expected === given;
   
-  // HIER STATISTIKEN SENDEN
-  await fetch('/api/vocab-stats', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        english: word.en, 
-        german: word.de,
-        correct: isCorrect
-      })
-  });
+  // Statistik an den Server senden (Fehler hier abfangen, damit UI weitergeht)
+  try {
+      await fetch('/api/vocab-stats', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            english: word.en, 
+            german: word.de,
+            correct: isCorrect
+          })
+      });
+  } catch (statsError) {
+      console.error("❌ Fehler beim Senden der Statistik:", statsError);
+      // Nicht kritisch, UI soll weiterlaufen
+  }
   
+  // Feedback basierend auf Korrektheit und Versuch anzeigen
   if (isCorrect) {
-    // RICHTIG!
-    await showFeedback({
-      correct: true,
-      transcribed: userAnswer,
-      attempt: currentAttempts,
-      pronunciationScore: null,
-      expectedWord: word.en
-    });
+    await showFeedback({ correct: true, attempt: currentAttempts });
   } else {
-    // FALSCH!
     if (currentAttempts >= MAX_ATTEMPTS) {
-      // Zweiter Versuch auch falsch → 0 Punkte
-      await showFeedback({
-        correct: false,
-        transcribed: userAnswer,
-        attempt: currentAttempts,
-        expectedWord: word.en,
-        needsTTS: true
-      });
+      await showFeedback({ correct: false, attempt: currentAttempts, expectedWord: word.en, needsTTS: true });
     } else {
-      // Erster Versuch falsch → Tipp geben
-      await showFeedback({
-        correct: false,
-        transcribed: userAnswer,
-        attempt: currentAttempts,
-        expectedWord: word.en,
-        needsTTS: false,
-        showHint: true
-      });
+      await showFeedback({ correct: false, attempt: currentAttempts, showHint: true });
     }
   }
 }
@@ -280,229 +304,190 @@ async function checkTextAnswer(userAnswer) {
 // Feedback anzeigen
 // ========================================
 async function showFeedback(result) {
-  feedbackSection.classList.add('show');
+  feedbackSection.classList.remove('correct', 'incorrect'); // Klassen zurücksetzen
+  feedbackSection.style.display = 'block'; // Sicherstellen, dass es sichtbar ist
+  feedbackSection.classList.add('show'); // Animation hinzufügen
   
   let points = 0;
   let feedbackHTML = '';
   
   if (result.correct) {
-    // RICHTIG!
+    // ---- RICHTIG ----
     feedbackSection.classList.add('correct');
-    feedbackSection.classList.remove('incorrect');
     
-    // Punkte je nach Versuch
-    if (result.attempt === 1) {
-      points = 10;
-    } else {
-      points = 5;
-    }
-    
+    points = (result.attempt === 1) ? 10 : 5; // Punktevergabe
     score += points;
     streak++;
     correctCount++;
-    
     if (streak > bestStreak) bestStreak = streak;
     
     feedbackHTML = `
       <div class="feedback-icon">✅</div>
-      <div class="feedback-text">${result.attempt === 1 ? 'Perfekt!' : 'Jetzt hast du\'s!'}</div>
+      <div class="feedback-text">${result.attempt === 1 ? 'Perfekt!' : 'Genau! (2. Versuch)'}</div>
       <div class="feedback-details">
-        ${result.attempt === 1 ? 
-          `Das war richtig! <strong>+${points} Punkte</strong>` : 
-          `Das war beim 2. Versuch richtig! <strong>+${points} Punkte</strong>`
-        }
+        +${points} Punkte
       </div>
       <button class="next-btn" id="next-btn">Nächstes Wort →</button>
     `;
     
   } else {
-    // FALSCH!
+    // ---- FALSCH ----
     feedbackSection.classList.add('incorrect');
-    feedbackSection.classList.remove('correct');
     
     if (result.attempt >= MAX_ATTEMPTS) {
-      // Zweiter Versuch auch falsch
+      // -- Endgültig Falsch --
       streak = 0;
       wrongCount++;
       
       feedbackHTML = `
         <div class="feedback-icon">❌</div>
-        <div class="feedback-text">Das war leider nicht korrekt</div>
+        <div class="feedback-text">Leider nicht richtig.</div>
         <div class="feedback-details">
-          Das richtige Wort ist: <strong>"${result.expectedWord}"</strong><br>
-          💪 Nicht aufgeben! Das nächste klappt bestimmt!
+          Das richtige Wort war: <strong>"${result.expectedWord}"</strong>
         </div>
       `;
       
-      // TTS abspielen
+      // Korrekte Aussprache vorspielen
       if (result.needsTTS) {
-        feedbackHTML += `<div class="tts-playing">🔊 Hör dir die korrekte Aussprache an...</div>`;
-        feedbackSection.innerHTML = feedbackHTML;
+        feedbackHTML += `<div class="tts-playing" id="tts-indicator">🔊 Korrekte Aussprache...</div>`;
+        feedbackSection.innerHTML = feedbackHTML; // HTML aktualisieren, um Indicator zu zeigen
         
-        // HIER WIRD BEREITS DIE KORRIGIERTE FUNKTION AUFGERUFEN
-        await speakWord(result.expectedWord); 
-        
-        // Nach TTS: Next-Button anzeigen
+        try {
+            await speakWord(result.expectedWord); // Warten bis Audio fertig ist
+            // Indicator entfernen oder ändern
+            const ttsIndicator = document.getElementById('tts-indicator');
+            if(ttsIndicator) ttsIndicator.textContent = "🔊 Aussprache gehört.";
+        } catch (ttsError) {
+             const ttsIndicator = document.getElementById('tts-indicator');
+             if(ttsIndicator) ttsIndicator.textContent = "⚠️ Aussprache fehlgeschlagen.";
+        }
+
+        // Erst danach den "Weiter"-Button hinzufügen
+        feedbackHTML = feedbackSection.innerHTML; // Holen Sie sich den aktualisierten HTML
         feedbackHTML += `<button class="next-btn" id="next-btn">Nächstes Wort →</button>`;
         feedbackSection.innerHTML = feedbackHTML;
+        // Event Listener für den neu hinzugefügten Button setzen
         document.getElementById('next-btn').addEventListener('click', nextWord);
-        
+
       } else {
-        feedbackHTML += `<button class="next-btn" id="next-btn">Nächstes Wort →</button>`;
-        feedbackSection.innerHTML = feedbackHTML;
-        document.getElementById('next-btn').addEventListener('click', nextWord);
+          // Fallback, falls kein TTS gebraucht wird (sollte nicht passieren bei endgültig falsch)
+          feedbackHTML += `<button class="next-btn" id="next-btn">Nächstes Wort →</button>`;
+          feedbackSection.innerHTML = feedbackHTML;
+          document.getElementById('next-btn').addEventListener('click', nextWord);
       }
       
     } else {
-      // Erster Versuch falsch → Zweite Chance
+      // -- Erster Versuch Falsch --
       feedbackHTML = `
-        <div class="feedback-icon">⚠️</div>
-        <div class="feedback-text">Nicht ganz! Versuch's nochmal!</div>
+        <div class="feedback-icon">🤔</div>
+        <div class="feedback-text">Noch nicht ganz!</div>
         <div class="feedback-details">
-          Du hast noch <strong>eine Chance</strong>!
+          Du hast noch <strong>eine Chance</strong>.
         </div>
       `;
       
-      // Tipp-Button anzeigen
+      // Tipp-Button anzeigen (wird nur angezeigt, wenn 1. Versuch falsch)
       hintBtn.style.display = 'inline-block';
-      
-      // Tipp abrufen und anzeigen
-      if (result.showHint) {
-        feedbackHTML += `<div class="hint-loading">💡 Tipp wird geladen...</div>`;
-        feedbackSection.innerHTML = feedbackHTML;
-        
-        try {
-          const word = words[currentIndex];
-          // KORRIGIERTER API-Pfad
-          const response = await fetch('/api/vocab-hint', { 
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              english: word.en, // Server erwartet 'english' und 'german'
-              german: word.de 
-            })
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            
-            // Tipp in hint-text anzeigen
-            hintText.textContent = `💡 ${data.hint}`;
-            hintText.style.display = 'block';
-            
-            // Hint-loading entfernen
-            const hintLoading = feedbackSection.querySelector('.hint-loading');
-            if (hintLoading) hintLoading.remove();
-          }
-        } catch (error) {
-          console.error('❌ Hint error:', error);
-        }
-      }
       
       feedbackHTML += `<button class="next-btn" id="retry-btn">Nochmal versuchen</button>`;
       feedbackSection.innerHTML = feedbackHTML;
       
+      // Event Listener für "Nochmal versuchen"
       document.getElementById('retry-btn').addEventListener('click', () => {
-        // Feedback ausblenden, Inputs wieder aktivieren
         feedbackSection.classList.remove('show');
-        feedbackSection.classList.remove('incorrect');
+        transcriptionDisplay.style.display = 'none'; // Transkription ausblenden
         
-        // Transkription zurücksetzen
-        transcriptionDisplay.style.display = 'none';
-        transcriptionText.textContent = '';
-        
+        // Buttons wieder aktivieren
         submitBtn.disabled = false;
         recordBtn.disabled = false;
         textAnswerInput.disabled = false;
-        textAnswerInput.value = '';
+        textAnswerInput.value = ''; // Eingabefeld leeren
         textAnswerInput.focus();
+        
+        // Tipp-Button bleibt sichtbar für den zweiten Versuch
+        hintBtn.style.display = 'inline-block'; 
       });
       
-      return; // Nicht weitermachen!
+      return; // WICHTIG: Funktion hier beenden, da kein "Nächstes Wort"
     }
   }
   
-  // Falls nicht "retry", dann Next-Button Listener
-  if (result.correct || result.attempt >= MAX_ATTEMPTS) {
-    if (!result.needsTTS) {
-      feedbackSection.innerHTML = feedbackHTML;
-      document.getElementById('next-btn').addEventListener('click', nextWord);
-    }
+  // Event Listener für "Nächstes Wort" (nur wenn nicht "Nochmal versuchen")
+  if (result.correct || (result.attempt >= MAX_ATTEMPTS && !result.needsTTS) ) {
+    feedbackSection.innerHTML = feedbackHTML; // Sicherstellen, dass HTML aktuell ist
+    document.getElementById('next-btn').addEventListener('click', nextWord);
   }
   
-  // Score updaten
+  // UI-Updates für Score und Streak
   scoreEl.textContent = score;
-  streakEl.textContent = streak > 0 ? `${streak}🔥` : '0';
+  streakEl.textContent = `${streak}🔥`;
 }
 
 // ========================================
-// Nächstes Wort
+// Nächstes Wort laden
 // ========================================
 function nextWord() {
   currentIndex++;
-  currentAttempts = 0;
+  currentAttempts = 0; // Versuche zurücksetzen
   
   if (currentIndex >= words.length) {
-    showFinalStats();
+    showFinalStats(); // Quiz beenden
   } else {
-    showQuestion();
+    showQuestion(); // Nächste Frage anzeigen
   }
 }
 
 // ========================================
-// Frage anzeigen
+// Frage anzeigen (UI vorbereiten)
 // ========================================
 function showQuestion() {
   const word = words[currentIndex];
   
-  // UI zurücksetzen
-  feedbackSection.classList.remove('show');
-  feedbackSection.classList.remove('correct');
-  feedbackSection.classList.remove('incorrect');
+  // UI-Elemente zurücksetzen/aktualisieren
+  feedbackSection.classList.remove('show', 'correct', 'incorrect');
+  feedbackSection.style.display = 'none'; // Feedback komplett ausblenden
+  transcriptionDisplay.style.display = 'none'; // Transkription ausblenden
   
   questionSection.classList.add('active');
   questionSection.style.display = 'block';
   resultsSection.classList.remove('show');
   resultsSection.style.display = 'none';
   
-  germanWordEl.textContent = word.de;
+  germanWordEl.textContent = word.de; // Deutsches Wort anzeigen
   textAnswerInput.value = '';
   textAnswerInput.disabled = false;
   submitBtn.disabled = false;
   recordBtn.disabled = false;
   
-  hintText.style.display = 'none';
-  hintBtn.style.display = 'none';
+  hintText.style.display = 'none'; // Tipp-Text ausblenden
+  hintBtn.style.display = 'none'; // Tipp-Button ausblenden (wird bei Bedarf gezeigt)
   hintBtn.disabled = false;
   hintBtn.textContent = '💡 Tipp';
   
-  // Transkription zurücksetzen
-  transcriptionDisplay.style.display = 'none';
-  transcriptionText.textContent = '';
+  // Fortschrittsanzeige aktualisieren
+  currentQuestionEl.textContent = `${currentIndex + 1} / ${words.length}`; // Zeigt "1 / 10" an
+  scoreEl.textContent = score;
+  streakEl.textContent = `${streak}🔥`;
   
-  // Fortschritt aktualisieren
-  if (currentQuestionEl) {
-    currentQuestionEl.textContent = currentIndex + 1;
-  }
-  
-  // <-- NEU: OnClick-Event für den Audio-Button setzen
-  // Er ruft die 'speakWord'-Funktion mit dem KORREKTEN englischen Wort auf
+  // Audio-Button mit dem *englischen* Wort verknüpfen
   if (audioButton) {
-    audioButton.onclick = () => speakWord(word.en);
+    // Wir entfernen alte Listener und fügen einen neuen hinzu, um sicherzugehen
+    audioButton.onclick = () => speakWord(word.en); 
   }
   
-  textAnswerInput.focus();
+  textAnswerInput.focus(); // Fokus auf das Texteingabefeld
 }
 
 // ========================================
-// Finale Statistik
+// Finale Statistik anzeigen
 // ========================================
 function showFinalStats() {
   questionSection.style.display = 'none';
   feedbackSection.classList.remove('show');
   
   const totalWords = words.length;
-  const percentage = Math.round((correctCount / totalWords) * 100);
+  // Sicherstellen, dass nicht durch 0 geteilt wird
+  const percentage = totalWords > 0 ? Math.round((correctCount / totalWords) * 100) : 0; 
   
   // Ergebnis-Sektion füllen
   document.getElementById('final-percentage').textContent = percentage + '%';
@@ -510,153 +495,113 @@ function showFinalStats() {
   document.getElementById('total-wrong').textContent = wrongCount;
   document.getElementById('best-streak').textContent = bestStreak + '🔥';
   
+  // Ergebnis-Sektion anzeigen
   resultsSection.classList.add('show');
   resultsSection.style.display = 'block';
 }
 
 // ========================================
-// Start
+// Initialisierung & Start-Button Logik
 // ========================================
-startBtn.addEventListener('click', async () => {
-  // Audio entsperren
-  await unlockAudio();
-  
-  // Speech Recognition Setup
-  setupSpeechRecognition();
-  
-  // Vokabeln basierend auf Auswahl laden
-  const scenario = scenarioSelect.value;
-  const difficulty = difficultySelect.value;
-  
-  // Dummy-Vokabeln (später vom Server laden)
-  const vocabSets = {
-    shop: [
-      { de: 'Einkaufswagen', en: 'shopping cart' },
-      { de: 'Kasse', en: 'checkout' },
-      { de: 'Preis', en: 'price' },
-      { de: 'Rabatt', en: 'discount' },
-      { de: 'Quittung', en: 'receipt' },
-      { de: 'Warenkorb', en: 'basket' },
-      { de: 'Öffnungszeiten', en: 'opening hours' },
-      { de: 'Umkleidekabine', en: 'fitting room' },
-      { de: 'Größe', en: 'size' },
-      { de: 'Rückgabe', en: 'return' },
-      { de: 'Garantie', en: 'warranty' },
-      { de: 'Tasche', en: 'bag' },
-      { de: 'Verkäufer', en: 'salesperson' },
-      { de: 'Kreditkarte', en: 'credit card' },
-      { de: 'Bargeld', en: 'cash' }
-    ],
-    airport: [
-      { de: 'Flugzeug', en: 'airplane' },
-      { de: 'Gepäck', en: 'luggage' },
-      { de: 'Boarding-Pass', en: 'boarding pass' },
-      { de: 'Sicherheitskontrolle', en: 'security check' },
-      { de: 'Tor', en: 'gate' },
-      { de: 'Abflug', en: 'departure' },
-      { de: 'Ankunft', en: 'arrival' },
-      { de: 'Handgepäck', en: 'carry-on' },
-      { de: 'Reisepass', en: 'passport' },
-      { de: 'Zoll', en: 'customs' },
-      { de: 'Verspätung', en: 'delay' },
-      { de: 'Flugbegleiter', en: 'flight attendant' },
-      { de: 'Notausgang', en: 'emergency exit' },
-      { de: 'Sitzplatz', en: 'seat' },
-      { de: 'Anschnallgurt', en: 'seatbelt' }
-    ],
-    school: [
-      { de: 'Lehrer', en: 'teacher' },
-      { de: 'Hausaufgaben', en: 'homework' },
-      { de: 'Klassenzimmer', en: 'classroom' },
-      { de: 'Prüfung', en: 'exam' },
-      { de: 'Bleistift', en: 'pencil' },
-      { de: 'Schulbuch', en: 'textbook' },
-      { de: 'Tafel', en: 'blackboard' },
-      { de: 'Pause', en: 'break' },
-      { de: 'Unterricht', en: 'lesson' },
-      { de: 'Note', en: 'grade' },
-      { de: 'Schüler', en: 'student' },
-      { de: 'Stundenplan', en: 'schedule' },
-      { de: 'Rucksack', en: 'backpack' },
-      { de: 'Radiergummi', en: 'eraser' },
-      { de: 'Lineal', en: 'ruler' }
-    ],
-    food: [
-      { de: 'Speisekarte', en: 'menu' },
-      { de: 'Rechnung', en: 'bill' },
-      { de: 'Kellner', en: 'waiter' },
-      { de: 'Tisch', en: 'table' },
-      { de: 'Trinkgeld', en: 'tip' },
-      { de: 'Vorspeise', en: 'appetizer' },
-      { de: 'Hauptgericht', en: 'main course' },
-      { de: 'Nachtisch', en: 'dessert' },
-      { de: 'Getränk', en: 'beverage' },
-      { de: 'Besteck', en: 'cutlery' },
-      { de: 'Gabel', en: 'fork' },
-      { de: 'Messer', en: 'knife' },
-      { de: 'Löffel', en: 'spoon' },
-      { de: 'Serviette', en: 'napkin' },
-      { de: 'Reservierung', en: 'reservation' }
-    ],
-    present: [
-      { de: 'Geschenk', en: 'present' },
-      { de: 'Geburtstag', en: 'birthday' },
-      { de:E: 'Überraschung', en: 'surprise' },
-      { de: 'Verpackung', en: 'wrapping' },
-      { de: 'Schleife', en: 'bow' },
-      { de: 'Karte', en: 'card' },
-      { de: 'Feier', en: 'celebration' },
-      { de: 'Kuchen', en: 'cake' },
-      { de: 'Kerze', en: 'candle' },
-      { de: 'Gast', en: 'guest' },
-      { de: 'Einladung', en: 'invitation' },
-      { de: 'Party', en: 'party' },
-      { de: 'Luftballon', en: 'balloon' },
-      { de: 'Dekoration', en: 'decoration' },
-      { de: 'Wunsch', en: 'wish' }
-    ]
-  };
-  
-  words = vocabSets[scenario] || vocabSets.shop;
-  
-  // Schwierigkeit anwenden
-  const wordCounts = { easy: 5, medium: 10, hard: 15 };
-  const targetCount = wordCounts[difficulty] || 10;
-  
-  // Wenn mehr Wörter gewünscht als vorhanden, wiederholen
-  while (words.length < targetCount) {
-    words = [...words, ...vocabSets[scenario]];
-  }
-  words = words.slice(0, targetCount);
-  
-  // UI umschalten
-  setupSection.style.display = 'none';
-  showQuestion();
-});
+function initializeTrainer() {
+    // Event Listener für den Start-Button
+    startBtn.addEventListener('click', async () => {
+      // Audio sofort beim Start entsperren (erfordert Benutzerinteraktion)
+      const audioReady = await unlockAudio();
+      if (!audioReady) {
+          // Hinweis geben, falls Audio blockiert ist (selten, aber möglich)
+          alert("Audio konnte nicht initialisiert werden. Die Sprachausgabe funktioniert möglicherweise nicht.");
+      }
+      
+      // Speech Recognition vorbereiten
+      setupSpeechRecognition();
+      
+      // Vokabeln basierend auf Auswahl laden
+      const scenario = scenarioSelect.value;
+      const difficulty = difficultySelect.value;
+      
+      // Dummy-Vokabeln (später durch API-Aufruf ersetzen?)
+      // HINWEIS: Diese Vokabellisten sollten idealerweise vom Server kommen oder
+      //          zumindest in einer separaten Datei ausgelagert werden.
+      const vocabSets = {
+        shop: [
+          { de: 'Einkaufswagen', en: 'shopping cart' }, { de: 'Kasse', en: 'checkout' }, { de: 'Preis', en: 'price' }, { de: 'Rabatt', en: 'discount' }, { de: 'Quittung', en: 'receipt' }, { de: 'Warenkorb', en: 'basket' }, { de: 'Öffnungszeiten', en: 'opening hours' }, { de: 'Umkleidekabine', en: 'fitting room' }, { de: 'Größe', en: 'size' }, { de: 'Rückgabe', en: 'return' }, { de: 'Garantie', en: 'warranty' }, { de: 'Tasche', en: 'bag' }, { de: 'Verkäufer', en: 'salesperson' }, { de: 'Kreditkarte', en: 'credit card' }, { de: 'Bargeld', en: 'cash' }
+        ],
+        airport: [
+          { de: 'Flugzeug', en: 'airplane' }, { de: 'Gepäck', en: 'luggage' }, { de: 'Boarding-Pass', en: 'boarding pass' }, { de: 'Sicherheitskontrolle', en: 'security check' }, { de: 'Tor', en: 'gate' }, { de: 'Abflug', en: 'departure' }, { de: 'Ankunft', en: 'arrival' }, { de: 'Handgepäck', en: 'carry-on' }, { de: 'Reisepass', en: 'passport' }, { de: 'Zoll', en: 'customs' }, { de: 'Verspätung', en: 'delay' }, { de: 'Flugbegleiter', en: 'flight attendant' }, { de: 'Notausgang', en: 'emergency exit' }, { de: 'Sitzplatz', en: 'seat' }, { de: 'Anschnallgurt', en: 'seatbelt' }
+        ],
+        school: [
+          { de: 'Lehrer', en: 'teacher' }, { de: 'Hausaufgaben', en: 'homework' }, { de: 'Klassenzimmer', en: 'classroom' }, { de: 'Prüfung', en: 'exam' }, { de: 'Bleistift', en: 'pencil' }, { de: 'Schulbuch', en: 'textbook' }, { de: 'Tafel', en: 'blackboard' }, { de: 'Pause', en: 'break' }, { de: 'Unterricht', en: 'lesson' }, { de: 'Note', en: 'grade' }, { de: 'Schüler', en: 'student' }, { de: 'Stundenplan', en: 'schedule' }, { de: 'Rucksack', en: 'backpack' }, { de: 'Radiergummi', en: 'eraser' }, { de: 'Lineal', en: 'ruler' }
+        ],
+        food: [
+          { de: 'Speisekarte', en: 'menu' }, { de: 'Rechnung', en: 'bill' }, { de: 'Kellner', en: 'waiter' }, { de: 'Tisch', en: 'table' }, { de: 'Trinkgeld', en: 'tip' }, { de: 'Vorspeise', en: 'appetizer' }, { de: 'Hauptgericht', en: 'main course' }, { de: 'Nachtisch', en: 'dessert' }, { de: 'Getränk', en: 'beverage' }, { de: 'Besteck', en: 'cutlery' }, { de: 'Gabel', en: 'fork' }, { de: 'Messer', en: 'knife' }, { de: 'Löffel', en: 'spoon' }, { de: 'Serviette', en: 'napkin' }, { de: 'Reservierung', en: 'reservation' }
+        ],
+        present: [
+          { de: 'Geschenk', en: 'present' }, { de: 'Geburtstag', en: 'birthday' }, { de: 'Überraschung', en: 'surprise' }, { de: 'Verpackung', en: 'wrapping' }, { de: 'Schleife', en: 'bow' }, { de: 'Karte', en: 'card' }, { de: 'Feier', en: 'celebration' }, { de: 'Kuchen', en: 'cake' }, { de: 'Kerze', en: 'candle' }, { de: 'Gast', en: 'guest' }, { de: 'Einladung', en: 'invitation' }, { de: 'Party', en: 'party' }, { de: 'Luftballon', en: 'balloon' }, { de: 'Dekoration', en: 'decoration' }, { de: 'Wunsch', en: 'wish' }
+        ]
+      };
+      
+      // Wörter laden und auf Anzahl begrenzen
+      words = [...vocabSets[scenario] || vocabSets.shop]; // Kopie erstellen
+      const wordCounts = { easy: 5, medium: 10, hard: 15 };
+      const targetCount = wordCounts[difficulty] || 10;
+      
+      // Mischen und Auswählen (Fisher-Yates Shuffle)
+      for (let i = words.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [words[i], words[j]] = [words[j], words[i]];
+      }
+      words = words.slice(0, targetCount); // Auf gewünschte Anzahl kürzen
+      
+      // UI umschalten und erste Frage anzeigen
+      setupSection.style.display = 'none';
+      currentIndex = 0; // Sicherstellen, dass wir bei 0 starten
+      score = 0;
+      streak = 0;
+      bestStreak = 0;
+      correctCount = 0;
+      wrongCount = 0;
+      showQuestion(); 
+    });
 
-// Submit Button
-submitBtn.addEventListener('click', () => {
-  const answer = textAnswerInput.value.trim();
-  if (answer) {
-    checkAnswer(answer, 'text');
-  }
-});
+    // Event Listener für Text-Submit
+    submitBtn.addEventListener('click', () => {
+      const answer = textAnswerInput.value.trim();
+      checkAnswer(answer, 'text');
+    });
 
-// Enter-Taste im Input
-textAnswerInput.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') {
-    submitBtn.click();
-  }
-});
+    // Event Listener für Enter im Textfeld
+    textAnswerInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault(); // Verhindert Formular-Absendung, falls vorhanden
+        submitBtn.click();
+      }
+    });
 
-// Record Button
-recordBtn.addEventListener('click', () => {
-  if (isRecording) {
-    recognition.stop();
-  } else {
-    recognition.start();
-  }
-});
+    // Event Listener für Record-Button
+    recordBtn.addEventListener('click', () => {
+      if (!recognition) {
+        alert("Spracherkennung ist nicht initialisiert.");
+        return;
+      }
+      if (isRecording) {
+        recognition.stop();
+      } else {
+        try {
+            // Sicherstellen, dass der Audio Context bereit ist, bevor die Aufnahme startet
+            unlockAudio().then(() => {
+                recognition.start();
+            });
+        } catch (e) {
+            console.error("Fehler beim Starten der Spracherkennung:", e);
+            alert("Konnte die Spracherkennung nicht starten.");
+        }
+      }
+    });
 
-// Hint Button
-hintBtn.addEventListener('click', getHint);
+    // Event Listener für Tipp-Button
+    hintBtn.addEventListener('click', getHint);
+}
+
+// Initialisierung starten, wenn das DOM bereit ist
+document.addEventListener('DOMContentLoaded', initializeTrainer);
